@@ -4,7 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import cv2
 import random
-from create_mask.mask import create_mask
+
 from create_glasses.glasses import create_glasses
 
 
