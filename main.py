@@ -6,14 +6,19 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 import os
 import datetime
 import requests
+from VideoStreamThread import VideoStreamThread  # 👈 import ตัวใหม่
+
+RTSP_URL = "rtsp://admin:Codinghub12@192.168.1.64:554/Streaming/Channels/102"
+SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
+FACE_DB_FOLDER = r'C:\Users\arena\OneDrive\เอกสาร\CodingHub\facenet-pytorch\data'
+MIN_LOG_INTERVAL = 60  # วินาที
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-mtcnn = MTCNN(keep_all=True, device=device)
+mtcnn = MTCNN(keep_all=False, device=device)  # 👈 keep_all=False เพื่อเร่งความเร็ว
 resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
-SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
+
 attendance_status = {}
 last_logged_time = {}
-MIN_LOG_INTERVAL = 60  # seconds
 
 def load_face_database(folder_path):
     embeddings = []
@@ -21,7 +26,7 @@ def load_face_database(folder_path):
 
     for filename in os.listdir(folder_path):
         if filename.lower().endswith(('.jpg', '.png')):
-            name = os.path.splitext(filename)[0].replace('_Mask', '')  # remove _Mask
+            name = os.path.splitext(filename)[0].replace('_Mask', '')
             img_path = os.path.join(folder_path, filename)
             img = Image.open(img_path).convert('RGB')
             face_tensor = mtcnn(img)
@@ -36,12 +41,11 @@ def load_face_database(folder_path):
                 print(f"⚠️ No face detected in: {filename}")
 
     if not embeddings:
-        print("❌ No faces found in the database! Please check the 'data/' folder.")
+        print("❌ No faces found in the database!")
     return embeddings, names
 
-print("Loading face database...")
-database_embeddings, database_names = load_face_database(
-    folder_path=r'C:\Users\arena\OneDrive\เอกสาร\CodingHub\facenet-pytorch\data')
+print("🔄 Loading face database...")
+database_embeddings, database_names = load_face_database(FACE_DB_FOLDER)
 
 def log_attendance(name):
     now = datetime.datetime.now()
@@ -49,18 +53,14 @@ def log_attendance(name):
 
     last_time = last_logged_time.get(name)
     if last_time and (now - last_time).total_seconds() < MIN_LOG_INTERVAL:
-        return  # Skip if already logged recently
+        return
 
     if name not in attendance_status:
         status = "เข้างาน"
         attendance_status[name] = "in"
     else:
-        if attendance_status[name] == "in":
-            status = "เลิกงาน"
-            attendance_status[name] = "out"
-        else:
-            status = "เข้างาน"
-            attendance_status[name] = "in"
+        status = "เลิกงาน" if attendance_status[name] == "in" else "เข้างาน"
+        attendance_status[name] = "out" if attendance_status[name] == "in" else "in"
 
     data = {
         "data": [
@@ -82,7 +82,6 @@ def log_attendance(name):
     except Exception as e:
         print("❌ Error sending data to SheetDB:", e)
 
-
 def find_closest_match(face_embedding, database_embeddings, database_names):
     min_distance = float('inf')
     closest_name = "Unknown"
@@ -95,14 +94,14 @@ def find_closest_match(face_embedding, database_embeddings, database_names):
         closest_name = "Unknown"
     return closest_name, min_distance
 
-
-cap = cv2.VideoCapture(0)
-print("Starting camera...")
+print("📡 Connecting to IP Camera (RTSP)...")
+video_stream = VideoStreamThread(RTSP_URL)
 
 while True:
-    ret, frame = cap.read()
+    ret, frame = video_stream.read()
     if not ret:
-        break
+        print("⚠️ ไม่ได้ภาพจากกล้อง")
+        continue
 
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     boxes, probs = mtcnn.detect(img)
@@ -114,16 +113,18 @@ while True:
             face_tensor = torch.tensor(np.array(face_img)).permute(2, 0, 1).float() / 255.0
             face_embedding = resnet(face_tensor.unsqueeze(0).to(device))
             name, distance = find_closest_match(face_embedding, database_embeddings, database_names)
+
             if name != "Unknown":
                 log_attendance(name)
+
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             label = f"{name} ({distance:.2f})"
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                         0.6, (0, 255, 0), 2)
 
-    cv2.imshow('Face Recognition', frame)
+    cv2.imshow('Face Recognition (RTSP)', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-cap.release()
+video_stream.stop()
 cv2.destroyAllWindows()
