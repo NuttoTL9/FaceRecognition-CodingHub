@@ -21,7 +21,7 @@ mask_list.append(black_path)
 
 # print(mask_list)
 
-dataset_path = 'dataset'
+dataset_path = 'data'
 
 if not os.path.exists('dataset_with_mask'):
         os.mkdir('dataset_with_mask')
@@ -36,8 +36,8 @@ imagePaths = []
 
 
 for i in os.listdir(dataset_path):
-    for j in os.listdir(f'{dataset_path}/{i}'):
-        imagePaths.append(f'{dataset_path}/{i}/{j}')
+    for j in os.listdir(f'{dataset_path}'):
+        imagePaths.append(f'{dataset_path}/{i}')
         
 for i in tqdm(imagePaths,total=len(imagePaths)):
     mask_path = random.choice(mask_list)
