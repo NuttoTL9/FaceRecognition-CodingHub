@@ -4,7 +4,6 @@ from tqdm import tqdm
 import numpy as np
 import cv2
 import random
-
 from create_glasses.glasses import create_glasses
 
 
@@ -54,10 +53,8 @@ imagePaths = []
 
 
 for i in os.listdir("dataset_with_glasses"):
-    dir_path = f'dataset_with_glasses/{i}'
-    if os.path.isdir(dir_path):
-        for j in os.listdir(dir_path):
-            imagePaths.append(f'{dir_path}/{j}')
+    for j in os.listdir(f'dataset_with_glasses/{i}'):
+        imagePaths.append(f'dataset_with_glasses/{i}/{j}')
 
 
 
@@ -78,7 +75,7 @@ detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
 
 for (i,imagePath) in tqdm(enumerate(imagePaths),total=len(imagePaths)):
     # print(imagePath)
-    face_path = imagePath.replace('dataset_with_mask','dataset')
+    face_path = imagePath.replace('dataset_with_glasses','dataset')
     # print(face_path)
     image = cv2.imread(imagePath)
     face_image = cv2.imread(face_path)
