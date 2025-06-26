@@ -6,96 +6,94 @@ import cv2
 import random
 from create_mask.mask import create_mask
 
-
-mask_list = []
-
-default_path = os.path.join(os.getcwd(),"mask/mask.png")
-white_path = os.path.join(os.getcwd(),"mask/white.png")
-blue_path = os.path.join(os.getcwd(),"mask/blue.png")
-black_path = os.path.join(os.getcwd(),"mask/black.png")
-
-mask_list.append(default_path)
-mask_list.append(white_path)
-mask_list.append(blue_path)
-mask_list.append(black_path)
-
-# print(mask_list)
+# เตรียม list หน้ากาก
+mask_list = [
+    os.path.join(os.getcwd(), "mask/mask.png"),
+    os.path.join(os.getcwd(), "mask/white.png"),
+    os.path.join(os.getcwd(), "mask/blue.png"),
+    os.path.join(os.getcwd(), "mask/black.png")
+]
 
 dataset_path = 'data'
 
+# สร้างโฟลเดอร์เก็บภาพที่มี mask
 if not os.path.exists('dataset_with_mask'):
-        os.mkdir('dataset_with_mask')
-        
-        
-for i in os.listdir(dataset_path):
-    if not os.path.exists(f'dataset_with_mask/{i}'):
-        os.mkdir(f'dataset_with_mask/{i}')
-        
-        
+    os.makedirs('dataset_with_mask')
+
+# เก็บ path ภาพทั้งหมดจาก dataset_path
 imagePaths = []
-
-
 for i in os.listdir(dataset_path):
-    for j in os.listdir(f'{dataset_path}'):
-        imagePaths.append(f'{dataset_path}/{i}')
-        
-for i in tqdm(imagePaths,total=len(imagePaths)):
+    image_path = os.path.join(dataset_path, i)
+    if os.path.isfile(image_path):
+        imagePaths.append(image_path)
+    elif os.path.isdir(image_path):
+        for j in os.listdir(image_path):
+            sub_image_path = os.path.join(image_path, j)
+            if os.path.isfile(sub_image_path):
+                imagePaths.append(sub_image_path)
+
+# สร้างโฟลเดอร์ย่อยให้ตรงกับภาพต้นทาง
+for path in imagePaths:
+    rel_path = os.path.relpath(path, dataset_path)  # ส่วน path ต่อจาก data/
+    save_dir = os.path.join('dataset_with_mask', os.path.dirname(rel_path))
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+# วนใส่ mask ให้ภาพทั้งหมด
+for path in tqdm(imagePaths, total=len(imagePaths)):
     mask_path = random.choice(mask_list)
-    create_mask(i,mask_path)
+    create_mask(path, mask_path)
 
-imagePaths = []
+print('Mask Appending Done')
+print("Start Extract Faces...")
 
-for i in os.listdir("dataset_with_mask"):
-    for j in os.listdir(f'dataset_with_mask/{i}'):
-        imagePaths.append(f'dataset_with_mask/{i}/{j}')
-
-
-# if not os.path.exists('dataset_with_mask_face'):
-#     os.mkdir('dataset_with_mask_face')
-
-#     for i in os.listdir("dataset_with_mask"):
-#         os.mkdir(f'dataset_with_mask_face/{i}')
-
-
-print('MaskAppending Done')
-print("extract_faces")
-
+# เตรียมโมเดลตรวจจับใบหน้า
 protoPath = "face_detection_model/deploy.prototxt"
 modelPath = "face_detection_model/res10_300x300_ssd_iter_140000.caffemodel"
 detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
 
+# เก็บ path ภาพที่ใส่ mask แล้ว
+imagePaths = []
+for root, dirs, files in os.walk('dataset_with_mask'):
+    for file in files:
+        imagePaths.append(os.path.join(root, file))
 
-for (i,imagePath) in tqdm(enumerate(imagePaths),total=len(imagePaths)):
-    # print(imagePath)
-    face_path = imagePath.replace('dataset_with_mask','dataset')
-    # print(face_path)
+# วนตรวจจับใบหน้า ตัดเฉพาะส่วนใบหน้าเก็บทับไฟล์เดิม
+for imagePath in tqdm(imagePaths, total=len(imagePaths)):
+    face_path = imagePath.replace('dataset_with_mask', 'data')
+    
     image = cv2.imread(imagePath)
-
     face_image = cv2.imread(face_path)
-    (h,w) = image.shape[:2]
+    
+    if image is None or face_image is None:
+        print(f"Error reading image {imagePath} หรือ {face_path}")
+        os.remove(imagePath)
+        continue
 
-    imageBlob = cv2.dnn.blobFromImage(cv2.resize(face_image,(300,300)),1.0,(300,300),(104.0,177.0,123.0),swapRB=False,crop=False)
+    (h, w) = image.shape[:2]
 
-
+    imageBlob = cv2.dnn.blobFromImage(cv2.resize(face_image, (300, 300)), 1.0, (300, 300), (104.0, 177.0, 123.0), swapRB=False, crop=False)
     detector.setInput(imageBlob)
     detections = detector.forward()
-    # write_path = imagePath.replace('dataset_with_mask','dataset_with_mask_face')
 
-    if len(detections) > 0:
-        i = np.argmax(detections[0,0,:,2])
-        confidence = detections[0,0,i,2]
+    if detections.shape[2] > 0:
+        i = np.argmax(detections[0, 0, :, 2])
+        confidence = detections[0, 0, i, 2]
 
         if confidence > 0.5:
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (startX, startY, endX, endY) = box.astype("int")
 
-            box = detections[0,0,i,3:7] * np.array([w,h,w,h])
-            (startX,startY,endX,endY) = box.astype("int")
-
-            face = image[startY:endY,startX:endX]
+            face = image[startY:endY, startX:endX]
             try:
-                face = cv2.resize(face,(224,224))
-                cv2.imwrite(imagePath,face)
+                face = cv2.resize(face, (224, 224))
+                cv2.imwrite(imagePath, face)
             except:
-                print(f"Some error occured in {imagePath}")
+                print(f"Resize or Save Error in {imagePath}")
                 os.remove(imagePath)
         else:
             os.remove(imagePath)
+    else:
+        os.remove(imagePath)
+
+print("Face extraction completed.")

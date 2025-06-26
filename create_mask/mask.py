@@ -177,7 +177,7 @@ def mask_face(face_landmark, mask_img,face_img,pic_path):
     name = path[-2]
     image = path[-1]
     
-    face_img.save(f'dataset_with_mask/{name}/{image}')
+    face_img.save(f'dataset_with_mask/{image}')
 
 
 
