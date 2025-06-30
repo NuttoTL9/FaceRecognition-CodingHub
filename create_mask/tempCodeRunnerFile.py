@@ -1,1 +1,0 @@
-print(mask_path)
