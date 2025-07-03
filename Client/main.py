@@ -18,6 +18,9 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 # ---------------- Configurations ---------------- #
 CAMERA_SOURCES = [
     0,
+    "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
+    "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
+    "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 ]
     # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
     # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
@@ -204,11 +207,17 @@ def main():
                         print("เลือกกล้องไม่ถูกต้อง")
                         return
 
-                    cam_name = f"Camera-{cam_choice}"
+                    cam_name = f"Camera {cam_choice}"
                     stream = camera_streams.get(cam_name)
                     frame = camera_frames.get(cam_name)
-                    if not stream or frame is None:
-                        print("ไม่พบกล้องหรือภาพ")
+                    wait_time = 0
+                    while frame is None and wait_time < 3:  # รอ 3 วินาที
+                        time.sleep(0.1)
+                        wait_time += 0.1
+                        frame = camera_frames.get(cam_name)
+
+                    if frame is None:
+                        print("ไม่พบภาพจากกล้องหลังจากรอ")
                         return
 
                     input_name = input("ชื่อของบุคคล: ").strip()
@@ -233,7 +242,10 @@ def main():
 
                         embedding_np = embedding.squeeze(0).cpu().numpy().astype('float32')
                         print(f"Embedding shape: {embedding.shape}, numpy length: {len(embedding_np)}")
-                        milvus_collection.insert([[input_name], [embedding_np.tolist()]])
+                        milvus_collection.insert({
+                            "name": input_name,
+                            "embedding": embedding_np.tolist()
+                        })
                         milvus_collection.flush()
                         reload_face_database()
                         print("โหลดฐานข้อมูลใหม่เรียบร้อย")
