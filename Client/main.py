@@ -9,7 +9,6 @@ import numpy as np
 
 from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
-
 from grpc_client.milvus_grpc_utils import encode_vector_with_grpc
 from videostreamthread import videostreamthread
 from generate.glasses_overlay import overlay_glasses_with_eyes
@@ -159,7 +158,7 @@ def process_camera(rtsp_url, window_name):
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                    if name != "Unknown":
+                    if name != "Unknown" and distance < 0.7:
                         now = time.time()
                         last_time = last_log_times.get(name, 0)
 
