@@ -16,14 +16,15 @@ from mask_overlay import overlay_mask_with_eyes
 from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
 
 # ---------------- Configurations ---------------- #
-RTSP_URLS = [
+CAMERA_SOURCES = [
+    0,
     "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
     "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
     "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 ]
 
 SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(_file_)
 MIN_LOG_INTERVAL = 60  # seconds
 
 # ---------------- Initialize Models ---------------- #
@@ -116,48 +117,64 @@ def preprocess_face(img_np, box):
 
 
 # ---------------- Camera Processor ---------------- #
-def process_camera(rtsp_url, window_name):
-    stream = VideoStreamThread(rtsp_url)
-    camera_streams[window_name] = stream
-    print(f"Started: {window_name}")
 
-    while not should_exit:
-        ret, frame = stream.read()
-        if not ret:
-            continue
+def process_frame(frame, window_name):
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    boxes, probs, landmarks = mtcnn.detect(frame_rgb, landmarks=True)
 
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes, probs, landmarks = mtcnn.detect(frame_rgb, landmarks=True)
+    if boxes is not None:
+        face_tensors = []
+        for box in boxes:
+            face_tensor = preprocess_face(frame_rgb, box)
+            if face_tensor is None:
+                continue
+            face_tensors.append(face_tensor)
 
-        if boxes is not None:
-            face_tensors = []
-            for box in boxes:
-                face_tensor = preprocess_face(frame_rgb, box)
-                if face_tensor is None:
-                    continue
-                face_tensors.append(face_tensor)
+        if face_tensors:
+            faces_batch = torch.cat(face_tensors)
+            with torch.no_grad():
+                embeddings = resnet(faces_batch)
 
-            if face_tensors:
-                faces_batch = torch.cat(face_tensors)
-                with torch.no_grad():
-                    embeddings = resnet(faces_batch)
+            with embedding_lock:
+                local_embeddings = shared_embeddings.clone()
+                local_names = shared_names.copy()
 
-                with embedding_lock:
-                    local_embeddings = shared_embeddings.clone()
-                    local_names = shared_names.copy()
+            for embedding, box in zip(embeddings, boxes):
+                name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_names)
+                x1, y1, x2, y2 = map(int, box)
 
-                for embedding, box in zip(embeddings, boxes):
-                    name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_names)
-                    x1, y1, x2, y2 = map(int, box)
+                label = f"{name} ({distance:.2f})"
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                    label = f"{name} ({distance:.2f})"
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    camera_frames[window_name] = frame.copy()
 
+def process_camera(source, window_name):
+    if isinstance(source, str):  # RTSP
+        stream = VideoStreamThread(source)
+        camera_streams[window_name] = stream
 
-        camera_frames[window_name] = frame.copy()
+        print(f"Started RTSP camera: {window_name}")
+        while not should_exit:
+            ret, frame = stream.read()
+            if not ret:
+                continue
+            process_frame(frame, window_name)
 
+    else:  # Webcam
+        cap = cv2.VideoCapture(source)
+        if not cap.isOpened():
+            print(f"ไม่สามารถเปิดกล้อง: {window_name}")
+            return
 
+        print(f"Started webcam: {window_name}")
+        while not should_exit:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            process_frame(frame, window_name)
+
+        cap.release()
 
 # ---------------- Main ---------------- #
 def main():
@@ -166,11 +183,12 @@ def main():
     db_embeddings, db_names = load_face_database_from_milvus()
     print(device)
     threads = []
-    for idx, rtsp in enumerate(RTSP_URLS):
+    for idx, cam_source in enumerate(CAMERA_SOURCES):
         cam_name = f"Camera-{idx+1}"
-        t = threading.Thread(target=process_camera, args=(rtsp, cam_name))
+        t = threading.Thread(target=process_camera, args=(cam_source, cam_name))
         t.start()
         threads.append(t)
+
 
     while True:
         for name, frame in camera_frames.copy().items():
@@ -233,5 +251,5 @@ def main():
         t.join()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     main()
