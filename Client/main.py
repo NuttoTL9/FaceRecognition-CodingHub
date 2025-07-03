@@ -18,13 +18,13 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 # ---------------- Configurations ---------------- #
 CAMERA_SOURCES = [
     0,
-    "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
-    "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
-    "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 ]
+    # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
+    # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
+    # "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 
 SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
-BASE_DIR = os.path.dirname(_file_)
+BASE_DIR = os.path.dirname(__file__)
 MIN_LOG_INTERVAL = 60  # seconds
 
 # ---------------- Initialize Models ---------------- #
@@ -199,8 +199,8 @@ def main():
         if key == ord('s'):
             def capture_and_save():
                 try:
-                    cam_choice = input(f"เลือกกล้องที่จะใช้ (1 - {len(RTSP_URLS)}): ").strip()
-                    if not cam_choice.isdigit() or int(cam_choice) < 1 or int(cam_choice) > len(RTSP_URLS):
+                    cam_choice = input(f"เลือกกล้องที่จะใช้ (1 - {len(CAMERA_SOURCES)}): ").strip()
+                    if not cam_choice.isdigit() or int(cam_choice) < 1 or int(cam_choice) > len(CAMERA_SOURCES):
                         print("เลือกกล้องไม่ถูกต้อง")
                         return
 
@@ -251,5 +251,5 @@ def main():
         t.join()
     cv2.destroyAllWindows()
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     main()
