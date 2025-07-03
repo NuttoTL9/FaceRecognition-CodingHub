@@ -17,7 +17,14 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 
 # ---------------- Configurations ---------------- #
 CAMERA_SOURCES = [
+<<<<<<< Updated upstream
     0
+=======
+    0,
+#     "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
+#     "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
+#     "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
+>>>>>>> Stashed changes
 ]
     # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
     # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
@@ -238,13 +245,18 @@ def main():
                             embedding = resnet(face_tensor)
 
                         embedding_np = embedding.squeeze(0).cpu().numpy().astype('float32')
-                        print(f"Embedding shape: {embedding.shape}, numpy length: {len(embedding_np)}")
-                        milvus_collection.insert({
+                        data = {
                             "name": input_name,
                             "embedding": embedding_np.tolist()
-                        })
-                        milvus_collection.flush()
-                        reload_face_database()
+                        }
+                        res = requests.post("http://127.0.0.1:8000/add_face_vector/", json=data, timeout=5)
+                        if res.ok:
+                            print("✅ เพิ่มเวกเตอร์สำเร็จ:", res.json())
+                        else:
+                            print("❌ FastAPI ตอบกลับผิดพลาด:", res.status_code, res.text)
+                        # milvus_collection.insert([[input_name], [embedding_np.tolist()]])
+                        # print(f"บันทึกเวกเตอร์ '{input_name}' จาก {cam_name} แล้ว")
+                        # reload_face_database(milvus_collection)
                         print("โหลดฐานข้อมูลใหม่เรียบร้อย")
                 except Exception as e:
                     print(f"เกิดข้อผิดพลาดขณะบันทึก: {e}")
