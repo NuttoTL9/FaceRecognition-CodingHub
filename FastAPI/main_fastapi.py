@@ -7,9 +7,8 @@ import datetime
 import asyncpg
 
 # ------------------ Configurations ------------------ #
-POSTGRES_ADMIN_URL = "postgresql://Nutto:099768180Nn_@192.168.1.27:5432/postgres"  # เชื่อม DB แอดมิน (default postgres)
 POSTGRES_ADMIN_URL = "postgresql://Nutto:099768180Nn_@192.168.1.27:5432/postgres"
-DATABASE_URL = POSTGRES_ADMIN_URL  # ใช้ database postgres โดยตรง
+DATABASE_URL = POSTGRES_ADMIN_URL
 
 # ------------------ FastAPI Init ------------------ #
 app = FastAPI()
@@ -54,12 +53,12 @@ async def ensure_table_exists():
     conn = await asyncpg.connect(dsn=DATABASE_URL)
     await conn.execute(query)
     await conn.close()
-    print("✅ Table face_recog_log is ensured")
+    print("Table face_recog_log is ensured")
 
 # ------------------ Startup & Shutdown Event ------------------ #
 @app.on_event("startup")
 async def startup():
-    await ensure_table_exists()  # สร้าง table ก่อน connect database
+    await ensure_table_exists()
     await database.connect()
 
 @app.on_event("shutdown")
@@ -73,7 +72,7 @@ class VectorData(BaseModel):
 
 class LogData(BaseModel):
     name: str
-    event: str  # เช่น "in" หรือ "out"
+    event: str
 
 # ------------------ API ------------------ #
 @app.post("/add_face_vector/")
@@ -84,10 +83,10 @@ async def add_face_vector(data: VectorData):
     try:
         collection.insert([[data.name], [data.embedding]], fields=["name", "embedding"])
         collection.flush()
-        print("✅ Inserted:", data.name)
+        print("Inserted:", data.name)
         return {"status": "success"}
     except Exception as e:
-        print("❌ Insert failed:", e)
+        print("Insert failed:", e)
         raise HTTPException(status_code=500, detail="Insert failed")
 
 
@@ -101,8 +100,8 @@ async def log_event(data: LogData):
             "event": data.event
         }
         await database.execute(query=query, values=values)
-        print(f"📜 Log saved: {data.name} [{data.event}]")
+        print(f"Log saved: {data.name} [{data.event}]")
         return {"status": "logged"}
     except Exception as e:
-        print("❌ Log failed:", e)
+        print("Log failed:", e)
         raise HTTPException(status_code=500, detail="Log insert failed")

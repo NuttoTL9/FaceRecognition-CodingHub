@@ -173,14 +173,14 @@ def process_camera(rtsp_url, window_name):
                                 res = requests.post("http://127.0.0.1:8000/log_event/", json=payload, timeout=3)
 
                                 if res.ok:
-                                    print(f"📥 Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+                                    print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
                                     person_states[name] = new_event
                                     last_log_times[name] = now
                                 else:
-                                    print("⚠️ Log failed:", res.status_code, res.text)
+                                    print("Log failed:", res.status_code, res.text)
 
                             except Exception as e:
-                                print("⚠️ Logging error:", e)
+                                print("Logging error:", e)
 
                     x1, y1, x2, y2 = map(int, box)
 
