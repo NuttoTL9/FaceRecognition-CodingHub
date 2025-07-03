@@ -10,6 +10,7 @@ import numpy as np
 from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
 
+from milvus_grpc_utils import encode_vector_with_grpc
 from VideoStreamThread import VideoStreamThread
 from glasses_overlay import overlay_glasses_with_eyes
 from mask_overlay import overlay_mask_with_eyes
@@ -214,11 +215,23 @@ def main():
                             embedding = resnet(face_tensor)
 
                         embedding_np = embedding.squeeze(0).cpu().numpy().astype('float32')
-                        print(f"Embedding shape: {embedding.shape}, numpy length: {len(embedding_np)}")
-                        milvus_collection.insert([[input_name], [embedding_np.tolist()]])
-                        milvus_collection.flush()
-                        reload_face_database()
+                        data = {
+                            "name": input_name,
+                            "embedding": embedding_np.tolist()
+                        }
+                        res = requests.post("http://127.0.0.1:8000/add_face_vector/", json=data, timeout=5)
+                        if res.ok:
+                            print("✅ เพิ่มเวกเตอร์สำเร็จ:", res.json())
+                            # ส่ง vector ผ่าน gRPC
+                            grpc_response = encode_vector_with_grpc(embedding_np.tolist())
+                            print("✅ gRPC response vector:", grpc_response)
+                        else:
+                            print("❌ FastAPI ตอบกลับผิดพลาด:", res.status_code, res.text)
+                        # milvus_collection.insert([[input_name], [embedding_np.tolist()]])
+                        # print(f"บันทึกเวกเตอร์ '{input_name}' จาก {cam_name} แล้ว")
+                        # reload_face_database(milvus_collection)
                         print("โหลดฐานข้อมูลใหม่เรียบร้อย")
+                        
                 except Exception as e:
                     print(f"เกิดข้อผิดพลาดขณะบันทึก: {e}")
 
