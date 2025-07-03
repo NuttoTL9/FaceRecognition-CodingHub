@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import shutil
 
-class VideoStreamThread:
+class videostreamthread:
     def __init__(self, rtsp_url, width=320, height=240):
         self.rtsp_url = rtsp_url
         self.width = width
@@ -13,45 +13,56 @@ class VideoStreamThread:
         self.lock = threading.Lock()
         self.ret = False
         self.frame = None
-        self.pipe = None
 
-        # ตรวจสอบว่า FFmpeg ติดตั้งไว้หรือไม่
-        if not shutil.which("ffmpeg"):
-            raise EnvironmentError("FFmpeg ไม่พบใน PATH. โปรดติดตั้งด้วย: sudo apt install ffmpeg")
+        if isinstance(rtsp_url, int):
+            self.cap = cv2.VideoCapture(rtsp_url)
+            if not self.cap.isOpened():
+                raise Exception("ไม่สามารถเปิดกล้อง notebook ด้วย OpenCV ได้")
+            self.thread = threading.Thread(target=self.update_opencv, daemon=True)
+            self.thread.start()
+        else:
+            if not shutil.which("ffmpeg"):
+                raise EnvironmentError("FFmpeg ไม่พบใน PATH. โปรดติดตั้งด้วย: sudo apt install ffmpeg")
 
-        # FFmpeg command สำหรับอ่าน RTSP stream แบบ raw video
-        self.command = [
-            'ffmpeg',
-            '-rtsp_transport', 'tcp',
-            '-i', self.rtsp_url,
-            '-f', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', f'{self.width}x{self.height}',
-            '-an', '-sn',
-            '-loglevel', 'quiet',
-            'pipe:1'
-        ]
+            self.command = [
+                'ffmpeg',
+                '-rtsp_transport', 'tcp',
+                '-i', str(self.rtsp_url),
+                '-f', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{self.width}x{self.height}',
+                '-an', '-sn',
+                '-loglevel', 'quiet',
+                'pipe:1'
+            ]
 
-        try:
-            self.pipe = sp.Popen(self.command, stdout=sp.PIPE, bufsize=10**8)
-        except Exception as e:
-            raise Exception(f"❌ ไม่สามารถเปิด FFmpeg subprocess ได้: {e}")
+            try:
+                self.pipe = sp.Popen(self.command, stdout=sp.PIPE, bufsize=10**8)
+            except Exception as e:
+                raise Exception(f"ไม่สามารถเปิด FFmpeg subprocess ได้: {e}")
 
-        self.thread = threading.Thread(target=self.update, daemon=True)
-        self.thread.start()
+            self.thread = threading.Thread(target=self.update_ffmpeg, daemon=True)
+            self.thread.start()
 
-    def update(self):
+    def update_opencv(self):
         while not self.stopped:
-            # ตรวจสอบว่า FFmpeg ยังทำงานอยู่หรือไม่
+            ret, frame = self.cap.read()
+            if not ret:
+                continue
+            frame = cv2.resize(frame, (self.width, self.height))
+            with self.lock:
+                self.ret = True
+                self.frame = frame
+
+    def update_ffmpeg(self):
+        while not self.stopped:
             if self.pipe.poll() is not None:
                 print("⚠️ FFmpeg process ended unexpectedly.")
                 self.stop()
                 break
-
             raw_frame = self.pipe.stdout.read(self.width * self.height * 3)
             if len(raw_frame) != self.width * self.height * 3:
-                continue  # ข้าม frame ที่ไม่สมบูรณ์
-
+                continue
             frame = np.frombuffer(raw_frame, np.uint8).reshape((self.height, self.width, 3))
             with self.lock:
                 self.ret = True
@@ -67,16 +78,16 @@ class VideoStreamThread:
     def stop(self):
         if not self.stopped:
             self.stopped = True
-            if self.pipe:
+            if hasattr(self, 'cap'):
+                self.cap.release()
+            if hasattr(self, 'pipe') and self.pipe:
                 try:
                     self.pipe.terminate()
                     self.pipe.wait(timeout=2)
                 except Exception as e:
                     print(f"⚠️ ปิด FFmpeg ไม่สมบูรณ์: {e}")
-            # เช็คก่อนว่า thread ที่จะ join ไม่ใช่ thread ปัจจุบัน
-            if self.thread.is_alive() and threading.current_thread() != self.thread:
+            if hasattr(self, 'thread') and self.thread.is_alive() and threading.current_thread() != self.thread:
                 self.thread.join()
-
 
     def __del__(self):
         self.stop()

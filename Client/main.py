@@ -10,14 +10,15 @@ import numpy as np
 from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
 
-from milvus_grpc_utils import encode_vector_with_grpc
-from VideoStreamThread import VideoStreamThread
-from glasses_overlay import overlay_glasses_with_eyes
-from mask_overlay import overlay_mask_with_eyes
+from grpc_client.milvus_grpc_utils import encode_vector_with_grpc
+from videostreamthread import videostreamthread
+from generate.glasses_overlay import overlay_glasses_with_eyes
+from generate.mask_overlay import overlay_mask_with_eyes
 from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
 
 # ---------------- Configurations ---------------- #
 RTSP_URLS = [
+    0,
     "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
     "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
     "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
@@ -118,7 +119,7 @@ def preprocess_face(img_np, box):
 
 # ---------------- Camera Processor ---------------- #
 def process_camera(rtsp_url, window_name):
-    stream = VideoStreamThread(rtsp_url)
+    stream = videostreamthread(rtsp_url)
     camera_streams[window_name] = stream
     print(f"Started: {window_name}")
 
@@ -222,14 +223,11 @@ def main():
                         res = requests.post("http://127.0.0.1:8000/add_face_vector/", json=data, timeout=5)
                         if res.ok:
                             print("✅ เพิ่มเวกเตอร์สำเร็จ:", res.json())
-                            # ส่ง vector ผ่าน gRPC
                             grpc_response = encode_vector_with_grpc(embedding_np.tolist())
-                            print("✅ gRPC response vector:", grpc_response)
+                            reload_face_database()
+                            return grpc_response
                         else:
                             print("❌ FastAPI ตอบกลับผิดพลาด:", res.status_code, res.text)
-                        # milvus_collection.insert([[input_name], [embedding_np.tolist()]])
-                        # print(f"บันทึกเวกเตอร์ '{input_name}' จาก {cam_name} แล้ว")
-                        # reload_face_database(milvus_collection)
                         print("โหลดฐานข้อมูลใหม่เรียบร้อย")
                         
                 except Exception as e:

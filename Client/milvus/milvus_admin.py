@@ -1,4 +1,4 @@
-from pymilvus import connections, Collection
+from pymilvus import connections, utility, CollectionSchema, FieldSchema, DataType, Collection
 import torch
 
 connections.connect("default", host="192.168.1.27", port="19530")
@@ -20,12 +20,24 @@ def delete_by_name(name: str):
     print("ลบแล้ว:", res)
 
 def drop_all():
-    confirm = input("ต้องการลบทุกข้อมูลใน Milvus ใช่ไหม? พิมพ์ 'yes' เพื่อยืนยัน: ")
-    if confirm.lower() == "yes":
-        collection.drop()
-        print("ลบ collection แล้ว")
-    else:
-        print("ยกเลิกการลบ")
+    if "face_vectors" in utility.list_collections():
+        utility.drop_collection("face_vectors")
+
+    fields = [
+        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
+    ]
+
+    schema = CollectionSchema(fields, description="Face Embeddings Collection")
+    collection = Collection(name="face_vectors", schema=schema)
+    collection.create_index(
+        field_name="embedding",
+        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
+    )
+    collection.load()
+
+    print("Drop database Suscess ")
 
 def count_entities():
     print(f"จำนวนข้อมูลใน Milvus: {collection.num_entities}")

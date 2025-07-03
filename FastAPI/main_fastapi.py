@@ -16,8 +16,8 @@ connections.connect(alias="default", host="192.168.1.27", port="19530")
 collection_name = "face_vectors"
 
 fields = [
-    FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=36),
-    FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100, is_indexed=True),
+    FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+    FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100),
     FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
 ]
 
@@ -42,10 +42,19 @@ class VectorData(BaseModel):
 @app.post("/add_face_vector/")
 async def add_face_vector(request: Request):
     data = await request.json()
-    id_ = data.get("id") or str(uuid.uuid4())
     name = data.get("name")
     embedding = data.get("embedding")
+
     if not name or not isinstance(embedding, list) or len(embedding) != 512:
         return {"status": "error", "message": "ข้อมูลไม่ถูกต้อง"}
-    collection.insert(id=[id_], name=[name], embedding=[embedding])
-    return {"status": "success", "id": id_}
+
+    try:
+        collection.insert([[name], [embedding]], fields=["name", "embedding"])
+        collection.flush()
+        print("✅ Inserted:", name)
+        print("📦 Total in collection:", collection.num_entities)
+        return {"status": "success"}
+    except Exception as e:
+        print("❌ Insert failed:", e)
+        raise HTTPException(status_code=500, detail="Insert failed")
+

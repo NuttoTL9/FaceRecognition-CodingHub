@@ -19,4 +19,4 @@ collection.create_index(
 )
 collection.load()
 
-print("Milvus collection 'face_vectors' created with dim=2048")
+print("Milvus collection 'face_vectors' created with dim=512")
