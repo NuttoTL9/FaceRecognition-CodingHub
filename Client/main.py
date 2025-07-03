@@ -19,10 +19,10 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 # ---------------- Configurations ---------------- #
 RTSP_URLS = [
     0,
-    "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
-    "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
-    "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 ]
+    # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
+    # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
+    # "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 
 SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
 BASE_DIR = os.path.dirname(__file__)
@@ -41,6 +41,9 @@ embedding_lock = threading.Lock()
 shared_embeddings = torch.empty(0, 512).to(device)
 shared_names = []
 should_exit = False
+MIN_LOG_INTERVAL = 60
+last_log_times = {}
+person_states = {}
 
 # ---------------- Milvus ---------------- #
 def create_milvus_collection():
@@ -66,7 +69,7 @@ milvus_collection = create_milvus_collection()
 def reload_face_database():
     global shared_embeddings, shared_names
     embeddings, names = load_face_database_from_milvus()
-    print("Loaded names from Milvus:", names)  # Debug เพิ่มเติม
+    print("Loaded names from Milvus:", names) 
     with embedding_lock:
         shared_embeddings = embeddings
         shared_names = names
@@ -150,6 +153,35 @@ def process_camera(rtsp_url, window_name):
 
                 for embedding, box in zip(embeddings, boxes):
                     name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_names)
+                    x1, y1, x2, y2 = map(int, box)
+
+                    label = f"{name} ({distance:.2f})"
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                    if name != "Unknown":
+                        now = time.time()
+                        last_time = last_log_times.get(name, 0)
+
+                        if now - last_time >= MIN_LOG_INTERVAL:
+                            # ตรวจสถานะล่าสุดของบุคคลนี้
+                            last_state = person_states.get(name, "out")
+                            new_event = "in" if last_state == "out" else "out"
+
+                            try:
+                                payload = {"name": name, "event": new_event}
+                                res = requests.post("http://127.0.0.1:8000/log_event/", json=payload, timeout=3)
+
+                                if res.ok:
+                                    print(f"📥 Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+                                    person_states[name] = new_event
+                                    last_log_times[name] = now
+                                else:
+                                    print("⚠️ Log failed:", res.status_code, res.text)
+
+                            except Exception as e:
+                                print("⚠️ Logging error:", e)
+
                     x1, y1, x2, y2 = map(int, box)
 
                     label = f"{name} ({distance:.2f})"
