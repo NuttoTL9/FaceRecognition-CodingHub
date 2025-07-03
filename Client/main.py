@@ -17,10 +17,7 @@ from pymilvus import connections, Collection, CollectionSchema, FieldSchema, Dat
 
 # ---------------- Configurations ---------------- #
 CAMERA_SOURCES = [
-    0,
-    "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
-    "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
-    "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
+    0
 ]
     # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
     # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
@@ -207,7 +204,7 @@ def main():
                         print("เลือกกล้องไม่ถูกต้อง")
                         return
 
-                    cam_name = f"Camera {cam_choice}"
+                    cam_name = f"Camera-{cam_choice}"
                     stream = camera_streams.get(cam_name)
                     frame = camera_frames.get(cam_name)
                     wait_time = 0
