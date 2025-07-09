@@ -11,51 +11,50 @@ from PIL import Image
 from facenet_pytorch import MTCNN, InceptionResnetV1
 from grpc_client.milvus_grpc_utils import encode_vector_with_grpc
 from videostreamthread import videostreamthread
-from generate.glasses_overlay import overlay_glasses_with_eyes
-from generate.mask_overlay import overlay_mask_with_eyes
 from pymilvus import connections, Collection, CollectionSchema, FieldSchema, DataType, utility
 
-# ---------------- Configurations ---------------- #
 RTSP_URLS = [
     0,
 ]
-    # "rtsp://admin:Codinghub22@192.168.1.101:554/Streaming/Channels/102",
-    # "rtsp://admin:Codinghub22@192.168.1.102:554/Streaming/Channels/102",
-    # "rtsp://admin:johny2121@192.168.1.30:554/Streaming/Channels/201/"
 
-SHEETDB_API_URL = "https://sheetdb.io/api/v1/vq3gqcx2oz3kt"
-BASE_DIR = os.path.dirname(__file__)
-MIN_LOG_INTERVAL = 60  # seconds
-
-# ---------------- Initialize Models ---------------- #
-device = torch.device("cuda:0")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 mtcnn = MTCNN(keep_all=True, device=device, post_process=False)
 resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
-connections.connect("default", host="192.168.1.27", port="19530")
 
-# ---------------- Global State ---------------- #
+connections.connect("default", host="192.168.1.27", port=19530)
+
+
+COLLECTION_NAME = "face_vectors"
+
 camera_streams = {}
 camera_frames = {}
 embedding_lock = threading.Lock()
+
 shared_embeddings = torch.empty(0, 512).to(device)
 shared_names = []
+shared_employee_ids = []
+
 should_exit = False
-MIN_LOG_INTERVAL = 60
+MIN_LOG_INTERVAL = 60  # วินาที
 last_log_times = {}
 person_states = {}
 
-# ---------------- Milvus ---------------- #
+
 def create_milvus_collection():
-    if "face_vectors" in utility.list_collections():
-        return Collection("face_vectors")
+    if COLLECTION_NAME in utility.list_collections():
+        collection = Collection(COLLECTION_NAME)
+        collection.load()
+        return collection
 
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="employee_id", dtype=DataType.VARCHAR, max_length=50),
         FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100),
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
     ]
+
     schema = CollectionSchema(fields, description="Face Embeddings Collection")
-    collection = Collection(name="face_vectors", schema=schema)
+    collection = Collection(name=COLLECTION_NAME, schema=schema)
     collection.create_index(
         field_name="embedding",
         index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
@@ -63,38 +62,46 @@ def create_milvus_collection():
     collection.load()
     return collection
 
+
 milvus_collection = create_milvus_collection()
 
-def reload_face_database():
-    global shared_embeddings, shared_names
-    embeddings, names = load_face_database_from_milvus()
-    print("Loaded names from Milvus:", names) 
-    with embedding_lock:
-        shared_embeddings = embeddings
-        shared_names = names
 
 def load_face_database_from_milvus():
-    vectors, names = [], []
+    vectors, names, employee_ids = [], [], []
     try:
         milvus_collection.load()
-        results = milvus_collection.query(expr="", output_fields=["name", "embedding"], limit=10000)
+        results = milvus_collection.query(expr="", output_fields=["employee_id", "name", "embedding"], limit=10000)
         for item in results:
             vectors.append(torch.tensor(item['embedding']).to(device))
             names.append(item['name'])
+            employee_ids.append(item['employee_id'])
         if not vectors:
-            return torch.empty(0, 512).to(device), []
-        return torch.stack(vectors), names
+            return torch.empty(0, 512).to(device), names, employee_ids
+        return torch.stack(vectors), names, employee_ids
     except Exception as e:
         print("Failed to load from Milvus:", e)
-        return torch.empty(0, 512).to(device), []
+        return torch.empty(0, 512).to(device), [], []
 
 
-def find_closest_match(face_embedding, db_embeddings, db_names, threshold=1.0):
+def reload_face_database():
+    global shared_embeddings, shared_names, shared_employee_ids
+    embeddings, names, employee_ids = load_face_database_from_milvus()
+    print("Loaded employee_ids and names from Milvus:", [f"{eid}:{name}" for eid, name in zip(employee_ids, names)])
+    with embedding_lock:
+        shared_employee_ids = employee_ids
+        shared_names = names
+        shared_embeddings = embeddings
+
+
+def find_closest_match(face_embedding, db_embeddings, db_employee_ids, db_names, threshold=1.0):
     if db_embeddings.shape[0] == 0:
-        return "Unknown", float('inf')
+        return "Unknown", "Unknown", float('inf')
     distances = torch.norm(db_embeddings - face_embedding, dim=1)
     min_dist, idx = torch.min(distances, dim=0)
-    return (db_names[idx], min_dist.item()) if min_dist.item() <= threshold else ("Unknown", min_dist.item())
+    if min_dist.item() <= threshold:
+        return db_employee_ids[idx], db_names[idx], min_dist.item()
+    else:
+        return "Unknown", "Unknown", min_dist.item()
 
 
 def preprocess_face(img_np, box):
@@ -119,7 +126,6 @@ def preprocess_face(img_np, box):
     return face_tensor
 
 
-# ---------------- Camera Processor ---------------- #
 def process_camera(rtsp_url, window_name):
     stream = videostreamthread(rtsp_url)
     camera_streams[window_name] = stream
@@ -149,55 +155,45 @@ def process_camera(rtsp_url, window_name):
                 with embedding_lock:
                     local_embeddings = shared_embeddings.clone()
                     local_names = shared_names.copy()
+                    local_employee_ids = shared_employee_ids.copy()
 
                 for embedding, box in zip(embeddings, boxes):
-                    name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_names)
+                    employee_id, name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_employee_ids, local_names)
                     x1, y1, x2, y2 = map(int, box)
 
                     label = f"{name} ({distance:.2f})"
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                    if name != "Unknown" and distance < 0.7:
+                    if employee_id != "Unknown" and distance < 0.7:
                         now = time.time()
-                        last_time = last_log_times.get(name, 0)
+                        last_time = last_log_times.get(employee_id, 0)
 
                         if now - last_time >= MIN_LOG_INTERVAL:
-                            # ตรวจสถานะล่าสุดของบุคคลนี้
-                            last_state = person_states.get(name, "out")
+                            last_state = person_states.get(employee_id, "out")
                             new_event = "in" if last_state == "out" else "out"
 
                             try:
-                                payload = {"name": name, "event": new_event}
-                                res = requests.post("http://127.0.0.1:8000/log_event/", json=payload, timeout=3)
+                                payload = {"name": employee_id, "event": new_event}
+                                res = requests.post("http://192.168.1.27:8989/log_event/", json=payload, timeout=3)
 
                                 if res.ok:
                                     print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
-                                    person_states[name] = new_event
-                                    last_log_times[name] = now
+                                    person_states[employee_id] = new_event
+                                    last_log_times[employee_id] = now
                                 else:
                                     print("Log failed:", res.status_code, res.text)
 
                             except Exception as e:
                                 print("Logging error:", e)
 
-                    x1, y1, x2, y2 = map(int, box)
-
-                    label = f"{name} ({distance:.2f})"
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
-
         camera_frames[window_name] = frame.copy()
 
 
-
-# ---------------- Main ---------------- #
 def main():
     print("Loading database from Milvus...")
     reload_face_database()
-    db_embeddings, db_names = load_face_database_from_milvus()
-    print(device)
+
     threads = []
     for idx, rtsp in enumerate(RTSP_URLS):
         cam_name = f"Camera-{idx+1}"
@@ -210,7 +206,6 @@ def main():
             cv2.imshow(name, frame)
 
         key = cv2.waitKey(1) & 0xFF
-
         if key == ord('s'):
             def capture_and_save():
                 try:
@@ -226,9 +221,10 @@ def main():
                         print("ไม่พบกล้องหรือภาพ")
                         return
 
+                    input_employee_id = input("Employee ID: ").strip()
                     input_name = input("ชื่อของบุคคล: ").strip()
-                    if not input_name:
-                        print("ชื่อไม่ถูกต้อง")
+                    if not input_employee_id or not input_name:
+                        print("Employee ID หรือ ชื่อไม่ถูกต้อง")
                         return
 
                     img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -247,20 +243,15 @@ def main():
                             embedding = resnet(face_tensor)
 
                         embedding_np = embedding.squeeze(0).cpu().numpy().astype('float32')
-                        data = {
-                            "name": input_name,
-                            "embedding": embedding_np.tolist()
-                        }
-                        res = requests.post("http://127.0.0.1:8000/add_face_vector/", json=data, timeout=5)
-                        if res.ok:
-                            print("✅ เพิ่มเวกเตอร์สำเร็จ:", res.json())
-                            grpc_response = encode_vector_with_grpc(embedding_np.tolist())
-                            reload_face_database()
-                            return grpc_response
-                        else:
-                            print("❌ FastAPI ตอบกลับผิดพลาด:", res.status_code, res.text)
-                        print("โหลดฐานข้อมูลใหม่เรียบร้อย")
-                        
+                        grpc_response = encode_vector_with_grpc(
+                            embedding_np.tolist(),
+                            employee_id=input_employee_id,
+                            name=input_name
+                        )
+                        reload_face_database()
+                        print("บันทึกข้อมูลเรียบร้อย")
+                        return grpc_response
+
                 except Exception as e:
                     print(f"เกิดข้อผิดพลาดขณะบันทึก: {e}")
 
@@ -274,6 +265,7 @@ def main():
     for t in threads:
         t.join()
     cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     main()

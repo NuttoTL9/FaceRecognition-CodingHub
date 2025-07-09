@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15image_transform.proto\";\n\x0bsourceImage\x12\r\n\x05image\x18\x01 \x01(\x0c\x12\r\n\x05width\x18\x02 \x01(\x02\x12\x0e\n\x06height\x18\x03 \x01(\x02\"@\n\x10transformedImage\x12\r\n\x05image\x18\x01 \x01(\x0c\x12\r\n\x05width\x18\x02 \x01(\x02\x12\x0e\n\x06height\x18\x03 \x01(\x02\"\x1f\n\rVectorRequest\x12\x0e\n\x06vector\x18\x01 \x03(\x02\" \n\x0eVectorResponse\x12\x0e\n\x06vector\x18\x01 \x03(\x02\x32n\n\rEncodeService\x12,\n\tGetEncode\x12\x0c.sourceImage\x1a\x11.transformedImage\x12/\n\x0c\x45ncodeVector\x12\x0e.VectorRequest\x1a\x0f.VectorResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x15image_transform.proto\";\n\x0bsourceImage\x12\r\n\x05image\x18\x01 \x01(\x0c\x12\r\n\x05width\x18\x02 \x01(\x02\x12\x0e\n\x06height\x18\x03 \x01(\x02\"@\n\x10transformedImage\x12\r\n\x05image\x18\x01 \x01(\x0c\x12\r\n\x05width\x18\x02 \x01(\x02\x12\x0e\n\x06height\x18\x03 \x01(\x02\"B\n\rVectorRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0b\x65mployee_id\x18\x02 \x01(\t\x12\x0e\n\x06vector\x18\x03 \x03(\x02\" \n\x0eVectorResponse\x12\x0e\n\x06vector\x18\x01 \x03(\x02\x32n\n\rEncodeService\x12,\n\tGetEncode\x12\x0c.sourceImage\x1a\x11.transformedImage\x12/\n\x0c\x45ncodeVector\x12\x0e.VectorRequest\x1a\x0f.VectorResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,9 +36,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TRANSFORMEDIMAGE']._serialized_start=86
   _globals['_TRANSFORMEDIMAGE']._serialized_end=150
   _globals['_VECTORREQUEST']._serialized_start=152
-  _globals['_VECTORREQUEST']._serialized_end=183
-  _globals['_VECTORRESPONSE']._serialized_start=185
-  _globals['_VECTORRESPONSE']._serialized_end=217
-  _globals['_ENCODESERVICE']._serialized_start=219
-  _globals['_ENCODESERVICE']._serialized_end=329
+  _globals['_VECTORREQUEST']._serialized_end=218
+  _globals['_VECTORRESPONSE']._serialized_start=220
+  _globals['_VECTORRESPONSE']._serialized_end=252
+  _globals['_ENCODESERVICE']._serialized_start=254
+  _globals['_ENCODESERVICE']._serialized_end=364
 # @@protoc_insertion_point(module_scope)

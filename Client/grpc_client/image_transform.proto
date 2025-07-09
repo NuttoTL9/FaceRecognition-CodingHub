@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+service EncodeService {
+    rpc GetEncode (sourceImage) returns (transformedImage);
+    rpc EncodeVector (VectorRequest) returns (VectorResponse);
+}
+
+message sourceImage {
+    bytes image = 1;
+    float width = 2;
+    float height = 3;
+}
+
+message transformedImage {
+    bytes image = 1;
+    float width = 2;
+    float height = 3;
+}
+message VectorRequest {
+    string name = 1;
+    string employee_id = 2;
+    repeated float vector = 3;
+}
+
+message VectorResponse {
+    repeated float vector = 1;
+}
