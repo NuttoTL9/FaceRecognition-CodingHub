@@ -179,6 +179,9 @@ def create_employee_checkin(employee_id: str, log_type: str):
 
 @app.post("/log_event/")
 async def log_event(data: LogData, _=Depends(get_milvus_connection)):  # <-- เพิ่ม Depends ตรงนี้
+    bangkok = pytz.timezone("Asia/Bangkok")
+    now_local = datetime.datetime.now(bangkok)
+    now_local_naive = now_local.replace(tzinfo=None)
     try:
         collection = get_or_create_collection()
         expr = f'employee_id == "{data.name}"'
@@ -194,7 +197,7 @@ async def log_event(data: LogData, _=Depends(get_milvus_connection)):  # <-- เ
         values = {
             "employee_id": data.name,
             "name": real_name,
-            "timestamp": datetime.datetime.now(),
+            "timestamp": now_local_naive,
             "event": data.event
         }
         await database.execute(query=query, values=values)
