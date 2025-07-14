@@ -43,6 +43,12 @@ person_states = {}
 def create_milvus_collection():
     if COLLECTION_NAME in utility.list_collections():
         collection = Collection(COLLECTION_NAME)
+        if not collection.has_index():
+            collection.create_index(
+                field_name="embedding",
+                index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}},
+                sync=True  # ถ้ามีพารามิเตอร์นี้ในไลบรารีของคุณ
+            )
         collection.load()
         return collection
 
@@ -55,12 +61,16 @@ def create_milvus_collection():
 
     schema = CollectionSchema(fields, description="Face Embeddings Collection")
     collection = Collection(name=COLLECTION_NAME, schema=schema)
+
     collection.create_index(
         field_name="embedding",
-        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
+        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}},
+        sync=True
     )
+
     collection.load()
     return collection
+
 
 
 milvus_collection = create_milvus_collection()

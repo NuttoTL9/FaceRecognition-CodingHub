@@ -1,22 +1,57 @@
-from pymilvus import connections, utility, CollectionSchema, FieldSchema, DataType, Collection
+from pymilvus import Collection, connections, CollectionSchema, FieldSchema, DataType, utility
 
 connections.connect("default", host="192.168.1.27", port="19530")
+COLLECTION_NAME = "face_vectors"
 
+# เช็คว่ามี collection ชื่อ face_vectors หรือยัง
 if "face_vectors" in utility.list_collections():
-    utility.drop_collection("face_vectors")
+    collection = Collection("face_vectors")
+    collection.drop()
+    print("Dropped existing collection face_vectors")
 
 fields = [
     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+    FieldSchema(name="employee_id", dtype=DataType.VARCHAR, max_length=100),
     FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100),
-    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
+    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512),
 ]
 
-schema = CollectionSchema(fields, description="Face Embeddings Collection")
-collection = Collection(name="face_vectors", schema=schema)
-collection.create_index(
-    field_name="embedding",
-    index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}}
-)
-collection.load()
+schema = CollectionSchema(fields, description="Face Embeddings Collection with employee_id")
 
-print("Milvus collection 'face_vectors' created with dim=512")
+collection = Collection(name="face_vectors", schema=schema)
+print("Created new collection face_vectors with updated schema")
+
+def create_milvus_collection():
+    if COLLECTION_NAME in utility.list_collections():
+        collection = Collection(COLLECTION_NAME)
+        if not collection.has_index():
+            collection.create_index(
+                field_name="embedding",
+                index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}},
+                sync=True  # ถ้ามีพารามิเตอร์นี้ในไลบรารีของคุณ
+            )
+        collection.load()
+        return collection
+
+    fields = [
+        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="employee_id", dtype=DataType.VARCHAR, max_length=50),
+        FieldSchema(name="name", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=512)
+    ]
+
+    schema = CollectionSchema(fields, description="Face Embeddings Collection")
+    collection = Collection(name=COLLECTION_NAME, schema=schema)
+
+    collection.create_index(
+        field_name="embedding",
+        index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}},
+        sync=True
+    )
+
+    collection.load()
+    return collection
+
+
+
+milvus_collection = create_milvus_collection()
