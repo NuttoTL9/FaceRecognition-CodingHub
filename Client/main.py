@@ -36,6 +36,7 @@ shared_employee_ids = []
 
 should_exit = False
 MIN_LOG_INTERVAL = 60  # วินาที
+MIN_FACE_AREA = 8000
 last_log_times = {}
 person_states = {}
 
@@ -152,9 +153,16 @@ def process_camera(rtsp_url, window_name):
         if boxes is not None:
             face_tensors = []
             for box in boxes:
+                x1, y1, x2, y2 = map(int, box)
+                box_area = (x2 - x1) * (y2 - y1)
+                print("Box area:", box_area)
+                if box_area < MIN_FACE_AREA:
+                    continue
+
                 face_tensor = preprocess_face(frame_rgb, box)
                 if face_tensor is None:
                     continue
+
                 face_tensors.append(face_tensor)
 
             if face_tensors:
@@ -170,6 +178,11 @@ def process_camera(rtsp_url, window_name):
                 for embedding, box in zip(embeddings, boxes):
                     employee_id, name, distance = find_closest_match(embedding.unsqueeze(0), local_embeddings, local_employee_ids, local_names)
                     x1, y1, x2, y2 = map(int, box)
+
+                    if distance < 0.7:
+                        display_name = name
+                    else:
+                        display_name = "Unknown"
 
                     label = f"{name} ({distance:.2f})"
                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
