@@ -1,13 +1,15 @@
 import os
-import torch
 from dotenv import load_dotenv
+import torch
 
-load_dotenv()
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
 
 # Device
 DEVICE = torch.device("cuda:0" if os.getenv("DEVICE") == "cuda" and torch.cuda.is_available() else "cpu")
 
-# กล้อง
+# RTSP URLs
 RTSP_RAW = os.getenv("RTSP_URLS", "0")
 RTSP_URLS = [int(RTSP_RAW)] if RTSP_RAW.isdigit() else RTSP_RAW.split(",")
 
