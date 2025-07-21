@@ -47,58 +47,77 @@ def process_camera(rtsp_url, window_name):
         boxes, _probs, _landmarks = mtcnn.detect(frame_rgb, landmarks=True)
 
         if boxes is not None:
-            face_tensors = []
-            for box in boxes:
-                x1, y1, x2, y2 = map(int, box)
-                box_area = (x2 - x1) * (y2 - y1)
-                if box_area < MIN_FACE_AREA:
-                    continue
-                face_tensor = preprocess_face(frame_rgb, box)
-                if face_tensor is not None:
-                    face_tensors.append(face_tensor)
-
+            face_tensors, valid_boxes = extract_valid_faces(frame_rgb, boxes)
             if face_tensors:
-                faces_batch = torch.cat(face_tensors)
-                with torch.no_grad():
-                    embeddings = resnet(faces_batch)
-
-                with embedding_lock:
-                    local_embeddings = shared_embeddings.clone()
-                    local_names = shared_names.copy()
-                    local_employee_ids = shared_employee_ids.copy()
-
-                for embedding, box in zip(embeddings, boxes):
-                    employee_id, name, distance = find_closest_match(
-                        embedding.unsqueeze(0),
-                        local_embeddings,
-                        local_employee_ids,
-                        local_names
-                    )
-                    x1, y1, x2, y2 = map(int, box)
-
-                    label = f"{name} ({distance:.2f})"
-                    color = (0, 255, 0) if distance < 0.7 else (0, 0, 255)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-                    if employee_id != "Unknown" and distance < 0.7:
-                        now = time.time()
-                        last_time = last_log_times.get(employee_id, 0)
-
-                        if now - last_time >= MIN_LOG_INTERVAL:
-                            last_state = person_states.get(employee_id, "out")
-                            new_event = "in" if last_state == "out" else "out"
-
-                            try:
-                                payload = {"name": employee_id, "event": new_event}
-                                res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-                                if res.ok:
-                                    print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
-                                    person_states[employee_id] = new_event
-                                    last_log_times[employee_id] = now
-                                else:
-                                    print("Log failed:", res.status_code, res.text)
-                            except Exception as e:
-                                print("Logging error:", e)
+                embeddings = get_embeddings(face_tensors)
+                identify_and_log_faces(frame, embeddings, valid_boxes)
 
         camera_frames[window_name] = frame.copy()
+
+
+def extract_valid_faces(frame_rgb, boxes):
+    face_tensors = []
+    valid_boxes = []
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box)
+        box_area = (x2 - x1) * (y2 - y1)
+        if box_area < MIN_FACE_AREA:
+            continue
+        face_tensor = preprocess_face(frame_rgb, box)
+        if face_tensor is not None:
+            face_tensors.append(face_tensor)
+            valid_boxes.append(box)
+    return face_tensors, valid_boxes
+
+
+def get_embeddings(face_tensors):
+    faces_batch = torch.cat(face_tensors)
+    with torch.no_grad():
+        embeddings = resnet(faces_batch)
+    return embeddings
+
+
+def identify_and_log_faces(frame, embeddings, boxes):
+    with embedding_lock:
+        local_embeddings = shared_embeddings.clone()
+        local_names = shared_names.copy()
+        local_employee_ids = shared_employee_ids.copy()
+
+    for embedding, box in zip(embeddings, boxes):
+        employee_id, name, distance = find_closest_match(
+            embedding.unsqueeze(0),
+            local_embeddings,
+            local_employee_ids,
+            local_names
+        )
+
+        x1, y1, x2, y2 = map(int, box)
+        label = f"{name} ({distance:.2f})"
+        color = (0, 255, 0) if distance < 0.7 else (0, 0, 255)
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        if employee_id != "Unknown" and distance < 0.7:
+            log_recognition_event(employee_id, name)
+
+
+def log_recognition_event(employee_id, name):
+    now = time.time()
+    last_time = last_log_times.get(employee_id, 0)
+
+    if now - last_time >= MIN_LOG_INTERVAL:
+        last_state = person_states.get(employee_id, "out")
+        new_event = "in" if last_state == "out" else "out"
+
+        try:
+            payload = {"name": employee_id, "event": new_event}
+            res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
+            if res.ok:
+                print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+                person_states[employee_id] = new_event
+                last_log_times[employee_id] = now
+            else:
+                print("Log failed:", res.status_code, res.text)
+        except Exception as e:
+            print("Logging error:", e)
