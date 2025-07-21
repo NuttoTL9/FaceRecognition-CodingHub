@@ -44,7 +44,7 @@ def process_camera(rtsp_url, window_name):
             continue
 
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes, probs, landmarks = mtcnn.detect(frame_rgb, landmarks=True)
+        boxes, _probs, _landmarks = mtcnn.detect(frame_rgb, landmarks=True)
 
         if boxes is not None:
             face_tensors = []
