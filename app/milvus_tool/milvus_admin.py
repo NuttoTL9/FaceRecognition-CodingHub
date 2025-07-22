@@ -1,7 +1,7 @@
 from pymilvus import connections, utility, CollectionSchema, FieldSchema, DataType, Collection
 import torch
 
-from Client.config import MILVUS_HOST, MILVUS_PORT
+from config import MILVUS_HOST, MILVUS_PORT
 
 connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
 collection = Collection("face_vectors")

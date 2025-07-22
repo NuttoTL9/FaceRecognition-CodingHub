@@ -1,6 +1,6 @@
 from pymilvus import Collection, connections, CollectionSchema, FieldSchema, DataType, utility
 
-from Client.config import MILVUS_HOST, MILVUS_PORT
+from config import MILVUS_HOST, MILVUS_PORT
 
 connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
 COLLECTION_NAME = "face_vectors"
