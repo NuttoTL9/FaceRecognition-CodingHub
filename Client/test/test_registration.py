@@ -21,9 +21,9 @@ def test_capture_and_save_success(dummy_frame):
          patch('streaming.registration.mtcnn') as mock_mtcnn, \
          patch('streaming.registration.preprocess_face') as mock_preprocess, \
          patch('streaming.registration.resnet') as mock_resnet, \
-         patch('streaming.registration.encode_vector_with_grpc') as mock_encode, \
-         patch('streaming.registration.reload_face_database') as mock_reload:
-
+         patch('streaming.registration.encode_vector_with_grpc') as mock_encode:
+        # Mock MTCNN detection to return a face box
+        
         mock_mtcnn.detect.return_value = ([ [50, 50, 150, 150] ], None)
         import torch
         mock_preprocess.return_value = torch.zeros((1, 3, 160, 160))

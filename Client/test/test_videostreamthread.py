@@ -14,11 +14,11 @@ from unittest.mock import patch
 # ---------------------------
 
 @patch('cv2.VideoCapture')
-def test_init_opencv_success(mock_VideoCapture):
+def test_init_opencv_success(mock_video_capture):
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
     mock_cap.read.return_value = (True, np.zeros((480, 640, 3), dtype=np.uint8))
-    mock_VideoCapture.return_value = mock_cap
+    mock_video_capture.return_value = mock_cap
 
     stream = videostreamthread(0, width=320, height=240)
     assert stream.rtsp_url == 0
@@ -28,10 +28,10 @@ def test_init_opencv_success(mock_VideoCapture):
     stream.stop()
 
 @patch('cv2.VideoCapture')
-def test_init_opencv_fail(mock_VideoCapture):
+def test_init_opencv_fail(mock_video_capture):
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = False
-    mock_VideoCapture.return_value = mock_cap
+    mock_video_capture.return_value = mock_cap
     with pytest.raises(ValueError, match="ไม่สามารถเปิดกล้อง notebook ด้วย OpenCV ได้"):
         videostreamthread(0)
 
@@ -41,7 +41,7 @@ def test_init_opencv_fail(mock_VideoCapture):
 
 @patch('shutil.which', return_value='/usr/bin/ffmpeg')
 @patch('subprocess.Popen')
-def test_init_ffmpeg_success(mock_popen, mock_which):
+def test_init_ffmpeg_success(mock_popen):
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     mock_proc.stdout.read.return_value = b'\x00' * (320 * 240 * 3)
@@ -53,13 +53,13 @@ def test_init_ffmpeg_success(mock_popen, mock_which):
     stream.stop()
 
 @patch('shutil.which', return_value=None)
-def test_init_ffmpeg_no_ffmpeg(mock_which):
+def test_init_ffmpeg_no_ffmpeg():
     with pytest.raises(EnvironmentError, match="FFmpeg ไม่พบใน PATH"):
         videostreamthread('rtsp://dummy_url')
 
 @patch('shutil.which', return_value='/usr/bin/ffmpeg')
 @patch('subprocess.Popen', side_effect=Exception('Popen failed'))
-def test_init_ffmpeg_popen_fail(mock_popen, mock_which):
+def test_init_ffmpeg_popen_fail():
     with pytest.raises(ValueError, match="ไม่สามารถเปิด FFmpeg subprocess ได้"):
         videostreamthread('rtsp://dummy_url')
 
@@ -68,13 +68,13 @@ def test_init_ffmpeg_popen_fail(mock_popen, mock_which):
 # ---------------------------
 
 @patch('cv2.VideoCapture')
-def test_update_opencv_reads_frame(mock_VideoCapture):
+def test_update_opencv_reads_frame(mock_video_capture):
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
     # คืนค่า ret=True, frame แบบ valid 2 ครั้ง, 1 ครั้ง ret=False เพื่อทดสอบ continue
     mock_cap.read.side_effect = [(True, frame), (False, None), (True, frame)]
-    mock_VideoCapture.return_value = mock_cap
+    mock_video_capture.return_value = mock_cap
 
     stream = videostreamthread(0, width=320, height=240)
     time.sleep(0.1)  # ให้ thread ทำงานสักครู่
@@ -115,7 +115,7 @@ def test_update_ffmpeg_reads_frame(mock_popen, mock_which):
 @patch('shutil.which', return_value='C:\\ffmpeg\\bin\\ffmpeg.exe')
 @patch('cv2.VideoCapture')
 @patch('subprocess.Popen')
-def test_stop_releases_resources(mock_popen, mock_VideoCapture, mock_which):
+def test_stop_releases_resources(mock_popen, mock_video_capture):
     # Test ffmpeg stop
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
@@ -129,7 +129,7 @@ def test_stop_releases_resources(mock_popen, mock_VideoCapture, mock_which):
     # Test opencv stop
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
-    mock_VideoCapture.return_value = mock_cap
+    mock_video_capture.return_value = mock_cap
 
     stream2 = videostreamthread(0)
     stream2.stop()

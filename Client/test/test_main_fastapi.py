@@ -13,10 +13,13 @@ example_embedding = [0.1] * 512
 # --- Mock Milvus connection and collection ---
 class DummyCollection:
     def insert(self, data, fields=None):
+        # Method intentionally left empty because this is a dummy collection for testing.
         pass
     def flush(self):
+        # Method intentionally left empty because this is a dummy collection for testing.
         pass
     def load(self):
+        # Method intentionally left empty because this is a dummy collection for testing.
         pass
     def query(self, expr=None, output_fields=None):
         # ตัวอย่างผลลัพธ์ query
@@ -119,6 +122,7 @@ def test_get_or_create_collection_existing(monkeypatch):
 
     class DummyCollection:
         def __init__(self, *args, **kwargs):
+            
             pass
         def load(self):
             return None
@@ -134,7 +138,7 @@ def test_get_milvus_connection_success(monkeypatch):
 
 def test_get_milvus_connection_failure(monkeypatch):
     def raise_exc(*args, **kwargs):
-        raise Exception("fail")
+        raise ValueError("fail")
     monkeypatch.setattr("FastAPI.main_fastapi.connections.has_connection", lambda alias: False)
     monkeypatch.setattr("FastAPI.main_fastapi.connections.connect", raise_exc)
     with pytest.raises(Exception):
@@ -177,7 +181,7 @@ def test_create_employee_checkin_fail(monkeypatch):
 
 def test_create_employee_checkin_exception(monkeypatch):
     def raise_exc(*args, **kwargs):
-        raise Exception("fail")
+        raise ValueError("fail")
     monkeypatch.setattr("FastAPI.main_fastapi.requests.post", raise_exc)
     res = create_employee_checkin("emp123", "IN")
     assert res is False

@@ -71,16 +71,16 @@ def test_show_all_ids_no_entities(mock_collection_class, capsys):
 @patch('builtins.open', new_callable=mock_open, read_data=b'certdata')
 @patch('grpc_client.milvus_grpc_utils.image_transform_pb2.VectorRequest')
 def test_encode_vector_with_grpc(
-    mock_VectorRequest,
+    mock_vector_request,
     mock_open,
-    mock_Stub,
+    mock_stub,
     mock_ssl_cred,
     mock_secure_channel,
 ):
     # mock instance stub
     mock_stub_instance = MagicMock()
     mock_stub_instance.EncodeVector.return_value.vector = [0.1] * 512
-    mock_Stub.return_value = mock_stub_instance
+    mock_stub.return_value = mock_stub_instance
 
     vector = [0.0] * 512
     employee_id = "EMP001"
@@ -92,8 +92,8 @@ def test_encode_vector_with_grpc(
     mock_open.assert_called_once_with('key/server.crt', 'rb')
     mock_ssl_cred.assert_called_once()
     mock_secure_channel.assert_called_once()
-    mock_Stub.assert_called_once()
-    mock_VectorRequest.assert_called_once_with(name=name, employee_id=employee_id, vector=vector)
+    mock_stub.assert_called_once()
+    mock_vector_request.assert_called_once_with(name=name, employee_id=employee_id, vector=vector)
 
     # เช็คค่าผลลัพธ์
     assert isinstance(result, list)
