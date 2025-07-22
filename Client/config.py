@@ -24,3 +24,7 @@ MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 
 # Log API
 LOG_EVENT_URL = os.getenv("LOG_EVENT_URL", "")
+
+# gRPC settings
+GRPC_HOST = os.getenv("GRPC_HOST", "localhost")
+GRPC_PORT = int(os.getenv("GRPC_PORT", "50051"))
