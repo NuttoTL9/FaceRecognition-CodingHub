@@ -127,9 +127,7 @@ def get_or_create_collection():
     collection.load()
     return collection
 
-
 @app.post("/add_face_vector/")
-
 def add_face_vector(data: VectorData, _=Depends(get_milvus_connection)):
     if not data.employee_id.strip():
         raise HTTPException(status_code=400, detail="Invalid input: employee_id is empty")
@@ -144,39 +142,12 @@ def add_face_vector(data: VectorData, _=Depends(get_milvus_connection)):
         print(f"❌ Insert failed: {ve}")
         raise HTTPException(status_code=400, detail="Invalid input: embedding contains invalid value")
 
-    
     collection = get_or_create_collection()
     collection.insert([[data.employee_id], [data.name], [embedding]], fields=["employee_id", "name", "embedding"])
     collection.flush()
     print(f"✅ Inserted employee_id={data.employee_id}, name={data.name} to Milvus")
 
-def add_face_vector(data: VectorData):
-    name = data.name
-    if isinstance(name, list):
-        if len(name) == 1:
-            name = name[0]
-        else:
-            raise HTTPException(status_code=400, detail="ชื่อควรเป็น string ไม่ใช่ list")
-
-    if not isinstance(name, str) or len(data.embedding) != 512:
-        raise HTTPException(status_code=400, detail="ข้อมูลไม่ถูกต้อง")
-
-    try:
-        collection = get_or_create_collection()
-        embedding = list(map(float, data.embedding))
-
-        print(f"DEBUG: name={name}, first 5 of embedding={embedding[:5]}")
-
-        collection.insert([[name], [embedding]], fields=["name", "embedding"])
-        collection.flush()
-
-        print(f"✅ Inserted {name} to Milvus")
-
-        return {"status": "success"}
-
-    except Exception as e:
-        print(f"❌ Insert failed: {e}")
-        raise HTTPException(status_code=500, detail="Insert failed")
+    return {"status": "success"}
 
 
 async def check_employee_exists(employee_id: str) -> str | None:

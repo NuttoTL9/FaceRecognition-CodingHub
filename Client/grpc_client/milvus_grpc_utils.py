@@ -2,7 +2,7 @@ import sys
 import os
 import grpc
 sys.path.append(os.path.dirname(__file__))
-from Client.config import MILVUS_HOST, MILVUS_PORT ,GRPC_HOST, GRPC_PORT
+from config import MILVUS_HOST, MILVUS_PORT ,GRPC_HOST, GRPC_PORT
 import image_transform_pb2_grpc
 import image_transform_pb2
 from pymilvus import connections, Collection, list_collections
