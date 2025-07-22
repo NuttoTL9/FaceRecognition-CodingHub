@@ -24,7 +24,7 @@ def get_vector_from_milvus(collection_name, id):
     if results:
         return results[0]["embedding"]
     else:
-        raise Exception("Vector not found")
+        raise ValueError("Vector not found")
 
 def show_all_ids(collection_name):
     collection = Collection(collection_name)
