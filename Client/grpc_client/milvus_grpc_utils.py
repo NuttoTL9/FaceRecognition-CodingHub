@@ -39,7 +39,7 @@ def show_all_ids(collection_name):
 
 
 
-def encode_vector_with_grpc(vector, name):
+def encode_vector_with_grpc(vector, employee_id,name):
 
     with open('key/server.crt', 'rb') as f:
         trusted_certs = f.read()
@@ -48,7 +48,7 @@ def encode_vector_with_grpc(vector, name):
     stub = image_transform_pb2_grpc.EncodeServiceStub(channel)
 
 
-    request = image_transform_pb2.VectorRequest(name=name, vector=vector)
+    request = image_transform_pb2.VectorRequest(name=name, employee_id=employee_id,vector=vector)
 
     response = stub.EncodeVector(request)
     return response.vector
