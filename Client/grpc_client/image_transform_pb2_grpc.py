@@ -6,6 +6,7 @@ import warnings
 import image_transform_pb2 as image__transform__pb2
 
 GRPC_GENERATED_VERSION = '1.73.1'
+METHOD_NOT_IMPLEMENTED_MSG = 'Method not implemented!'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -47,17 +48,18 @@ class EncodeServiceStub(object):
 class EncodeServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
+
     def get_encode(self,  context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details(METHOD_NOT_IMPLEMENTED_MSG)
+        raise NotImplementedError(METHOD_NOT_IMPLEMENTED_MSG)
 
     def encode_vector(self, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        context.set_details(METHOD_NOT_IMPLEMENTED_MSG)
+        raise NotImplementedError(METHOD_NOT_IMPLEMENTED_MSG)
 
 
 def add_encode_service_servicer_to_server(servicer, server):
