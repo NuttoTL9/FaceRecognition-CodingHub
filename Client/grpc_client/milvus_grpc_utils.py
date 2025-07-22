@@ -47,11 +47,6 @@ def encode_vector_with_grpc(vector, name):
     channel = grpc.secure_channel('192.168.1.27:50051', credentials)
     stub = image_transform_pb2_grpc.EncodeServiceStub(channel)
 
-    request = image_transform_pb2.VectorRequest(
-        name=name,
-        employee_id=employee_id,
-        vector=vector
-    )
 
     request = image_transform_pb2.VectorRequest(name=name, vector=vector)
 
