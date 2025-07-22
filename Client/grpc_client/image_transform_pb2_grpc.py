@@ -47,20 +47,20 @@ class EncodeServiceStub(object):
 class EncodeServiceServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def GetEncode(self, request, context):
+    def get_encode(self,  context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def EncodeVector(self, request, context):
+    def encode_vector(self, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
 
-def add_EncodeServiceServicer_to_server(servicer, server):
+def add_encode_service_servicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetEncode': grpc.unary_unary_rpc_method_handler(
                     servicer.GetEncode,
@@ -84,7 +84,7 @@ class EncodeService(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def GetEncode(request,
+    def get_encode(request,
             target,
             options=(),
             channel_credentials=None,
@@ -111,7 +111,7 @@ class EncodeService(object):
             _registered_method=True)
 
     @staticmethod
-    def EncodeVector(request,
+    def encode_vector(request,
             target,
             options=(),
             channel_credentials=None,
