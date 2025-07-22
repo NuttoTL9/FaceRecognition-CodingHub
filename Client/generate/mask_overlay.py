@@ -37,7 +37,6 @@ def overlay_mask_with_eyes(face_img, mask_img, left_eye, right_eye, box, scale=1
     y_offset = max(0, y_offset)
     mask_w = min(mask_w, face_img.shape[1] - x_offset)
     mask_h = min(mask_h, face_img.shape[0] - y_offset)
-    resized_mask = cv2.resize(mask_img, (mask_w, mask_h), interpolation=cv2.INTER_AREA)
 
     # แยก alpha และ BGR
     b, g, r, a = cv2.split(resized_mask)
