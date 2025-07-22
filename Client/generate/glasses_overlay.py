@@ -11,7 +11,7 @@ def overlay_glasses_with_eyes(face_img, glasses_img, left_eye, right_eye, box):
     คืนค่า: face_img ที่วางแว่นแล้ว
     """
 
-    x1, y1, x2, y2 = box
+    x1, y1, _x2, _y2 = box
 
     # ปรับตำแหน่งดวงตาให้สัมพันธ์กับ crop face
     left_eye_rel = (left_eye[0] - x1, left_eye[1] - y1)

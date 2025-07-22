@@ -11,7 +11,7 @@ def overlay_mask_with_eyes(face_img, mask_img, left_eye, right_eye, box, scale=1
 
     คืนค่า: face_img ที่วางแมสแล้ว
     """
-    x1, y1, x2, y2 = box
+    x1, y1, _x2, _y2 = box
     left_eye_rel = (left_eye[0] - x1, left_eye[1] - y1)
     right_eye_rel = (right_eye[0] - x1, right_eye[1] - y1)
 
