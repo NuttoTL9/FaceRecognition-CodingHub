@@ -58,8 +58,8 @@ class EncodeServiceServicer(object):
     def encode_vector(self, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details(METHOD_NOT_IMPLEMENTED_MSG)
-        raise NotImplementedError(METHOD_NOT_IMPLEMENTED_MSG)
+        context.set_details(METHOD_NOT_IMPLEMENTED_MSG + ' (encode_vector)')
+        raise NotImplementedError(METHOD_NOT_IMPLEMENTED_MSG + ' (encode_vector)')
 
 
 def add_encode_service_servicer_to_server(servicer, server):
