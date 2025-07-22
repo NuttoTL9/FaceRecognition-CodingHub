@@ -32,12 +32,12 @@ class EncodeServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.GetEncode = channel.unary_unary(
+        self.get_encode = channel.unary_unary(
                 '/EncodeService/GetEncode',
                 request_serializer=image__transform__pb2.sourceImage.SerializeToString,
                 response_deserializer=image__transform__pb2.transformedImage.FromString,
                 _registered_method=True)
-        self.EncodeVector = channel.unary_unary(
+        self.encode_vector = channel.unary_unary(
                 '/EncodeService/EncodeVector',
                 request_serializer=image__transform__pb2.VectorRequest.SerializeToString,
                 response_deserializer=image__transform__pb2.VectorResponse.FromString,
