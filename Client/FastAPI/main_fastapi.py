@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import os
 import pytz
 import requests
-
+from config import DEVICE, COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT
 load_dotenv()
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
@@ -42,7 +42,7 @@ COLLECTION_SCHEMA = CollectionSchema([
 
 
 # ------------------ Milvus Init ------------------ #
-connections.connect(alias="default", host="192.168.1.27", port="19530")
+connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
 
 COLLECTION_NAME = "face_vectors"
 COLLECTION_SCHEMA = CollectionSchema([
@@ -108,7 +108,7 @@ class LogData(BaseModel):
 def get_milvus_connection():
     try:
         if not connections.has_connection(alias="default"):
-            connections.connect(alias="default", host="192.168.1.27", port=19530)
+            connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
             print("Connected to Milvus")
     except Exception as e:
         print(f"Failed to connect Milvus: {e}")

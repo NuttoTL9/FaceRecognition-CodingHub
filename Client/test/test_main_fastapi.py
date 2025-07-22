@@ -103,8 +103,11 @@ def test_get_or_create_collection_creates(monkeypatch):
     # Create a dummy Collection class that mocks constructor & methods
     class DummyCollection:
         def __init__(self, *args, **kwargs):
+            # This constructor is intentionally left empty because this is a dummy collection for testing.
+            # The real Collection class would initialize internal state, but here we only need to mock the
             pass
         def create_index(self, **kwargs):
+
             return None
         def load(self):
             return None
@@ -122,7 +125,8 @@ def test_get_or_create_collection_existing(monkeypatch):
 
     class DummyCollection:
         def __init__(self, *args, **kwargs):
-            
+            # This constructor is intentionally left empty because this is a dummy collection for testing.
+            # The real Collection class would initialize internal state, but here we only need to mock the interface.
             pass
         def load(self):
             return None
