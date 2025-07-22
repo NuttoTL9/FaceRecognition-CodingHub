@@ -36,16 +36,24 @@ def show_all_ids(collection_name):
     else:
         print("No entities found in the collection.")
 
-def encode_vector_with_grpc(vector, name, employee_id):
+
+
+
+def encode_vector_with_grpc(vector, name):
+
     with open('key/server.crt', 'rb') as f:
         trusted_certs = f.read()
     credentials = grpc.ssl_channel_credentials(root_certificates=trusted_certs)
     channel = grpc.secure_channel('192.168.1.27:50051', credentials)
     stub = image_transform_pb2_grpc.EncodeServiceStub(channel)
+
     request = image_transform_pb2.VectorRequest(
         name=name,
         employee_id=employee_id,
         vector=vector
     )
+
+    request = image_transform_pb2.VectorRequest(name=name, vector=vector)
+
     response = stub.EncodeVector(request)
     return response.vector
