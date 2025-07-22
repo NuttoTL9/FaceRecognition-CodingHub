@@ -1,7 +1,9 @@
 from pymilvus import connections, utility, CollectionSchema, FieldSchema, DataType, Collection
 import torch
 
-connections.connect("default", host="192.168.1.27", port="19530")
+from Client.config import MILVUS_HOST, MILVUS_PORT
+
+connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
 collection = Collection("face_vectors")
 
 def list_all(limit=100):

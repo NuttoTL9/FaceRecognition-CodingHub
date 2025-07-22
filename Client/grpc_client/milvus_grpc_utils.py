@@ -2,12 +2,13 @@ import sys
 import os
 import grpc
 sys.path.append(os.path.dirname(__file__))
+from Client.config import MILVUS_HOST, MILVUS_PORT
 import image_transform_pb2_grpc
 import image_transform_pb2
 from pymilvus import connections, Collection, list_collections
 
 def show_collections():
-    connections.connect(alias="default", host="192.168.1.27", port="19530")
+    connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
     collections = list_collections()
     print(f"Collections in Milvus: {collections}")
     return collections
