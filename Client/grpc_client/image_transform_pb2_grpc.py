@@ -17,11 +17,9 @@ except ImportError:
 
 if _version_not_supported:
     raise RuntimeError(
-        f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in image_transform_pb2_grpc.py depends on'
-        + f' grpcio>={GRPC_GENERATED_VERSION}.'
-        + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
-        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
+        'The grpc package installed is at version {}, but the generated code in image_transform_pb2_grpc.py depends on grpcio>={}. Please upgrade your grpc module to grpcio>={} or downgrade your generated code using grpcio-tools<={}.'.format(
+            GRPC_VERSION, GRPC_GENERATED_VERSION, GRPC_GENERATED_VERSION, GRPC_VERSION
+        )
     )
 
 
