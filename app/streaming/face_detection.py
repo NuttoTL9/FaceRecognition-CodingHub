@@ -10,6 +10,7 @@ from recognition.face_models import mtcnn, resnet
 from recognition.face_utils import preprocess_face, find_closest_match
 from videostreamthread import videostreamthread
 from database.milvus_database import load_face_database
+from notify.notify import send_discord_alert
 
 camera_streams = {}
 camera_frames = {}
@@ -23,6 +24,9 @@ shared_names = []
 shared_employee_ids = []
 
 should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag ข้ามโมดูล
+
+last_unknown_alert_time = 0
+UNKNOWN_ALERT_INTERVAL = 60 
 
 def reload_face_database():
     global shared_embeddings, shared_names, shared_employee_ids
@@ -78,10 +82,15 @@ def get_embeddings(face_tensors):
 
 
 def identify_and_log_faces(frame, embeddings, boxes):
+    global last_unknown_alert_time
     with embedding_lock:
         local_embeddings = shared_embeddings.clone()
         local_names = shared_names.copy()
         local_employee_ids = shared_employee_ids.copy()
+
+    # สำเนา frame ก่อนวาดกรอบและ label
+    frame_for_discord = frame.copy()
+    unknown_detected = False
 
     for embedding, box in zip(embeddings, boxes):
         employee_id, name, distance = find_closest_match(
@@ -95,11 +104,22 @@ def identify_and_log_faces(frame, embeddings, boxes):
         label = f"{name} ({distance:.2f})"
         color = (0, 255, 0) if distance < 0.7 else (0, 0, 255)
 
+        # วาดกรอบและ label บน frame สำหรับแสดงผลกล้อง
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         if employee_id != "Unknown" and distance < 0.7:
             log_recognition_event(employee_id, name)
+        elif employee_id == "Unknown" or distance >= 0.7:
+            unknown_detected = True
+
+    if unknown_detected:
+        now = time.time()
+        if now - last_unknown_alert_time > UNKNOWN_ALERT_INTERVAL:
+            last_unknown_alert_time = now
+            # ส่ง frame ที่ไม่มีกรอบและ label ไปยัง Discord
+            _, img_encoded = cv2.imencode('.jpg', frame_for_discord)
+            send_discord_alert("พบใบหน้าที่ไม่รู้จัก!", img_encoded.tobytes())
 
 
 def log_recognition_event(employee_id, name):
@@ -107,17 +127,48 @@ def log_recognition_event(employee_id, name):
     last_time = last_log_times.get(employee_id, 0)
 
     if now - last_time >= MIN_LOG_INTERVAL:
-        last_state = person_states.get(employee_id, "out")
-        new_event = "in" if last_state == "out" else "out"
+        # Logic: กำหนดช่วงเวลาเช็คอิน/เช็คเอาท์
+        now_dt = datetime.datetime.now()
+        hour = now_dt.hour
+        if hour < 12:
+            new_event = "in"
+        else:
+            new_event = "out"
+
+        last_state = person_states.get(employee_id, None)
+        # ป้องกันการ log ซ้ำ event เดิมติดกัน
+        if last_state == new_event:
+            return
 
         try:
             payload = {"name": employee_id, "event": new_event}
             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
             if res.ok:
-                print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+                print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
                 person_states[employee_id] = new_event
                 last_log_times[employee_id] = now
             else:
                 print("Log failed:", res.status_code, res.text)
         except Exception as e:
             print("Logging error:", e)
+
+# def log_recognition_event(employee_id, name):
+#     now = time.time()
+#     last_time = last_log_times.get(employee_id, 0)
+
+#     if now - last_time >= MIN_LOG_INTERVAL:
+#         last_state = person_states.get(employee_id, "out")
+#         new_event = "in" if last_state == "out" else "out"
+
+#         try:
+#             payload = {"name": employee_id, "event": new_event}
+#             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
+#             if res.ok:
+#                 print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+#                 person_states[employee_id] = new_event
+#                 last_log_times[employee_id] = now
+#             else:
+#                 print("Log failed:", res.status_code, res.text)
+#         except Exception as e:
+#             print("Logging error:", e)
+

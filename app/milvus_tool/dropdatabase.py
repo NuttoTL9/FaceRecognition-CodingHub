@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from pymilvus import Collection, connections, CollectionSchema, FieldSchema, DataType, utility
 
 from config import MILVUS_HOST, MILVUS_PORT
