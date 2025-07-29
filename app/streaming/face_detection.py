@@ -27,6 +27,7 @@ should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag
 
 last_unknown_alert_time = 0
 UNKNOWN_ALERT_INTERVAL = 60 
+pending_unknown_alert = {"time": None, "frame": None}
 
 def reload_face_database():
     global shared_embeddings, shared_names, shared_employee_ids
@@ -82,75 +83,77 @@ def get_embeddings(face_tensors):
 
 
 def identify_and_log_faces(frame, embeddings, boxes):
-    global last_unknown_alert_time
-    with embedding_lock:
-        local_embeddings = shared_embeddings.clone()
-        local_names = shared_names.copy()
-        local_employee_ids = shared_employee_ids.copy()
+    global last_unknown_alert_time, pending_unknown_alert
+    found_known = False
+    found_unknown = False
 
-    # สำเนา frame ก่อนวาดกรอบและ label
-    frame_for_discord = frame.copy()
-    unknown_detected = False
-
+        # ... วนลูป embeddings ...
     for embedding, box in zip(embeddings, boxes):
         employee_id, name, distance = find_closest_match(
             embedding.unsqueeze(0),
-            local_embeddings,
-            local_employee_ids,
-            local_names
+            shared_embeddings,
+            shared_employee_ids,
+            shared_names
         )
-
         x1, y1, x2, y2 = map(int, box)
         label = f"{name} ({distance:.2f})"
-        color = (0, 255, 0) if distance < 0.7 else (0, 0, 255)
+        color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.7 else (0, 0, 255)
 
-        # วาดกรอบและ label บน frame สำหรับแสดงผลกล้อง
+        # วาดกรอบและ label
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         if employee_id != "Unknown" and distance < 0.7:
+            found_known = True
             log_recognition_event(employee_id, name)
         elif employee_id == "Unknown" or distance >= 0.7:
-            unknown_detected = True
+            found_unknown = True
 
-    if unknown_detected:
-        now = time.time()
-        if now - last_unknown_alert_time > UNKNOWN_ALERT_INTERVAL:
-            last_unknown_alert_time = now
-            # ส่ง frame ที่ไม่มีกรอบและ label ไปยัง Discord
-            _, img_encoded = cv2.imencode('.jpg', frame_for_discord)
+    now = time.time()
+    if found_known:
+        # ถ้ามีการรู้จำได้ ให้ลบ pending unknown alert
+        pending_unknown_alert["time"] = None
+        pending_unknown_alert["frame"] = None
+    elif found_unknown:
+        if pending_unknown_alert["time"] is None:
+            pending_unknown_alert["time"] = now
+            pending_unknown_alert["frame"] = frame.copy()
+        elif now - pending_unknown_alert["time"] > 2:
+            _, img_encoded = cv2.imencode('.jpg', pending_unknown_alert["frame"])
             send_discord_alert("พบใบหน้าที่ไม่รู้จัก!", img_encoded.tobytes())
+            last_unknown_alert_time = now
+            pending_unknown_alert["time"] = None
+            pending_unknown_alert["frame"] = None
 
 
 def log_recognition_event(employee_id, name):
     now = time.time()
     last_time = last_log_times.get(employee_id, 0)
 
-    if now - last_time >= MIN_LOG_INTERVAL:
-        # Logic: กำหนดช่วงเวลาเช็คอิน/เช็คเอาท์
-        now_dt = datetime.datetime.now()
-        hour = now_dt.hour
-        if hour < 12:
-            new_event = "in"
+    # Logic: กำหนดช่วงเวลาเช็คอิน/เช็คเอาท์
+    now_dt = datetime.datetime.now()
+    hour = now_dt.hour
+    if hour < 12:
+        new_event = "in"
+    else:
+        new_event = "out"
+
+    last_state = person_states.get(employee_id, None)
+    # ป้องกันการ log ซ้ำ event เดิมติดกัน และป้องกัน log ซ้ำในช่วงเวลาสั้นๆ
+    if last_state == new_event and (now - last_time) < MIN_LOG_INTERVAL:
+        return
+
+    try:
+        payload = {"name": employee_id, "event": new_event}
+        res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
+        if res.ok:
+            print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
+            person_states[employee_id] = new_event
+            last_log_times[employee_id] = now
         else:
-            new_event = "out"
-
-        last_state = person_states.get(employee_id, None)
-        # ป้องกันการ log ซ้ำ event เดิมติดกัน
-        if last_state == new_event:
-            return
-
-        try:
-            payload = {"name": employee_id, "event": new_event}
-            res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-            if res.ok:
-                print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
-                person_states[employee_id] = new_event
-                last_log_times[employee_id] = now
-            else:
-                print("Log failed:", res.status_code, res.text)
-        except Exception as e:
-            print("Logging error:", e)
+            print("Log failed:", res.status_code, res.text)
+    except Exception as e:
+        print("Logging error:", e)
 
 # def log_recognition_event(employee_id, name):
 #     now = time.time()

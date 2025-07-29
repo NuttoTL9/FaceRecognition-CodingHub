@@ -9,6 +9,8 @@ if os.path.exists(dotenv_path):
 # Device
 DEVICE = torch.device("cuda:0" if os.getenv("DEVICE") == "cuda" and torch.cuda.is_available() else "cpu")
 
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+
 # RTSP URLs
 RTSP_RAW = os.getenv("RTSP_URLS", "0")
 RTSP_URLS = [int(RTSP_RAW)] if RTSP_RAW.isdigit() else RTSP_RAW.split(",")

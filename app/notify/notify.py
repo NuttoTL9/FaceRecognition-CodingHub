@@ -1,8 +1,8 @@
 import requests
+from config import DISCORD_WEBHOOK_URL
 
 
 # LINE_NOTIFY_TOKEN = 'YOUR_LINE_NOTIFY_TOKEN'  # เปลี่ยนเป็น Token ของคุณ
-DISCORD_WEBHOOK_URL = 'https://discordapp.com/api/webhooks/1399591198708072481/0BEVFZUzrdWCHRC4YxcKA2LTgNPGmSe5ve2_FzWmebxI4PI-VWRwSjdaP6vp_ipfC1TB'
 
 # def send_line_alert(message):
 #     url = 'https://notify-api.line.me/api/notify'
