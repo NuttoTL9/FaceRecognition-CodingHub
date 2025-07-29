@@ -53,5 +53,5 @@ def encode_vector_with_grpc(vector, employee_id,name):
 
     request = image_transform_pb2.VectorRequest(name=name, employee_id=employee_id,vector=vector)
 
-    response = stub.EncodeVector(request)
+    response = stub.encode_vector(request)
     return response.vector
