@@ -137,8 +137,7 @@ def send_log_with_image(employee_id, name, event, frame, server_url):
         'event': event,
         'employee_id': employee_id  # ส่ง employee_id ด้วย
     }
-    print("Sending data:", data)
-
+    
     try:
         response = requests.post(server_url, data=data, files=files, timeout=5)
         print('Status code:', response.status_code)
