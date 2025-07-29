@@ -105,7 +105,7 @@ def identify_and_log_faces(frame, embeddings, boxes):
 
         if employee_id != "Unknown" and distance < 0.7:
             found_known = True
-            log_recognition_event(employee_id, name)
+            log_recognition_event(employee_id, name, frame)
         elif employee_id == "Unknown" or distance >= 0.7:
             found_unknown = True
 
@@ -126,52 +126,59 @@ def identify_and_log_faces(frame, embeddings, boxes):
             pending_unknown_alert["frame"] = None
 
 
-def log_recognition_event(employee_id, name):
+def send_log_with_image(employee_id, name, event, frame, server_url):
+    _, img_encoded = cv2.imencode('.jpg', frame)
+
+    files = {
+        'snap_file': ('snap.jpg', img_encoded.tobytes(), 'image/jpeg')  # ต้องใช้ชื่อฟิลด์ snap_file
+    }
+    data = {
+        'name': name,  # ตรงกับ Form(name)
+        'event': event,
+        'employee_id': employee_id  # ส่ง employee_id ด้วย
+    }
+    print("Sending data:", data)
+
+    try:
+        response = requests.post(server_url, data=data, files=files, timeout=5)
+        print('Status code:', response.status_code)
+        response_json = response.json()
+        # คุณอาจใช้ response_json ในการตรวจสอบผลลัพธ์เพิ่มเติมได้
+
+    except requests.exceptions.RequestException as e:
+        print('API log image error:', e)
+    except ValueError:
+        print('Response is not valid JSON:', response.text)
+
+
+def log_recognition_event(employee_id, name, frame):
     now = time.time()
     last_time = last_log_times.get(employee_id, 0)
 
-    # Logic: กำหนดช่วงเวลาเช็คอิน/เช็คเอาท์
-    now_dt = datetime.datetime.now()
-    hour = now_dt.hour
-    if hour < 12:
-        new_event = "in"
-    else:
-        new_event = "out"
-
-    last_state = person_states.get(employee_id, None)
-    # ป้องกันการ log ซ้ำ event เดิมติดกัน และป้องกัน log ซ้ำในช่วงเวลาสั้นๆ
-    if last_state == new_event and (now - last_time) < MIN_LOG_INTERVAL:
-        return
-
-    try:
-        payload = {"name": employee_id, "event": new_event}
-        res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-        if res.ok:
-            print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
-            person_states[employee_id] = new_event
-            last_log_times[employee_id] = now
+    if now - last_time >= MIN_LOG_INTERVAL:
+        # Logic: กำหนดช่วงเวลาเช็คอิน/เช็คเอาท์
+        now_dt = datetime.datetime.now()
+        hour = now_dt.hour
+        if hour < 12:
+            new_event = "in"
         else:
-            print("Log failed:", res.status_code, res.text)
-    except Exception as e:
-        print("Logging error:", e)
+            new_event = "out"
 
-# def log_recognition_event(employee_id, name):
-#     now = time.time()
-#     last_time = last_log_times.get(employee_id, 0)
+        last_state = person_states.get(employee_id, None)
+        # ป้องกันการ log ซ้ำ event เดิมติดกัน
+        if last_state == new_event:
+            return
 
-#     if now - last_time >= MIN_LOG_INTERVAL:
-#         last_state = person_states.get(employee_id, "out")
-#         new_event = "in" if last_state == "out" else "out"
-
-#         try:
-#             payload = {"name": employee_id, "event": new_event}
-#             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-#             if res.ok:
-#                 print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
-#                 person_states[employee_id] = new_event
-#                 last_log_times[employee_id] = now
-#             else:
-#                 print("Log failed:", res.status_code, res.text)
-#         except Exception as e:
-#             print("Logging error:", e)
-
+        try:
+            # payload = {"name": employee_id, "event": new_event}
+            # res = requests.get(LOG_EVENT_URL, json=payload, timeout=3)
+            # if res.ok:
+                print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
+                person_states[employee_id] = new_event
+                last_log_times[employee_id] = now
+                # เรียก API log_event_with_image ส่งภาพไป server
+                send_log_with_image(name,employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
+            # else:
+            #     print("Log failed:", res.status_code, res.text)
+        except Exception as e:
+            print("Logging error:", e)
