@@ -24,6 +24,8 @@ MIN_FACE_AREA = int(os.getenv("MIN_FACE_AREA", "8000"))
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
+
 # Log API
 LOG_EVENT_URL = os.getenv("LOG_EVENT_URL", "")
 

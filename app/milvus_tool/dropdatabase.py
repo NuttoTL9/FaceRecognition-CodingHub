@@ -34,7 +34,7 @@ def create_milvus_collection():
             collection.create_index(
                 field_name="embedding",
                 index_params={"metric_type": "L2", "index_type": "IVF_FLAT", "params": {"nlist": 128}},
-                sync=True  # ถ้ามีพารามิเตอร์นี้ในไลบรารีของคุณ
+                sync=True
             )
         collection.load()
         return collection
