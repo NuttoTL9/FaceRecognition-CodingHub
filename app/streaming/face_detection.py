@@ -132,7 +132,7 @@ def identify_and_log_faces(frame, embeddings, boxes):
             if now - last_unknown_alert_time > UNKNOWN_ALERT_INTERVAL:
                 now_dt = datetime.datetime.now()
                 date_str = now_dt.strftime("%d/%m/%Y")
-                time_str = now_dt.strftime("%H.%M น.")
+                time_str = now_dt.strftime("%H.%M") + " น."
                 message = f"พบใบหน้าที่ไม่รู้จัก! วันที่ {date_str} เวลา {time_str}"
                 _, img_encoded = cv2.imencode('.jpg', pending_unknown_alert["frame"])
                 send_discord_alert(message, img_encoded.tobytes())

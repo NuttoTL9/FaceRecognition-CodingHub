@@ -38,8 +38,8 @@ def detect_blink(frame):
         right_ear = eye_aspect_ratio(right_eye)
         avg_ear = (left_ear + right_ear) / 2.0
 
-        for (x, y) in np.concatenate((left_eye, right_eye)):
-            cv2.circle(frame, (x, y), 2, (255, 255, 0), -1)
+        # for (x, y) in np.concatenate((left_eye, right_eye)):
+        #     cv2.circle(frame, (x, y), 2, (255, 255, 0), -1)
 
         if avg_ear < EAR_THRESHOLD:
             # print(f"[INFO] Blink detected! Avg EAR: {avg_ear:.2f}")
