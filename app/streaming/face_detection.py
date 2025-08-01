@@ -23,14 +23,13 @@ last_blink_times = {}
 
 shared_embeddings = torch.empty(0, 512).to(DEVICE)
 shared_names = []
-shared_employee_ids = []
+shared_employee_ids = [] 
 
-should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag
+should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag ข้ามโมดูล
 
 last_unknown_alert_time = 0
-UNKNOWN_ALERT_INTERVAL = 60
+UNKNOWN_ALERT_INTERVAL = 60 
 pending_unknown_alert = {"time": None, "frame": None}
-
 
 def reload_face_database():
     global shared_embeddings, shared_names, shared_employee_ids
@@ -40,7 +39,6 @@ def reload_face_database():
         shared_employee_ids = employee_ids
         shared_names = names
         shared_embeddings = embeddings
-
 
 def process_camera(rtsp_url, window_name):
     stream = videostreamthread(rtsp_url)
@@ -98,7 +96,6 @@ def identify_and_log_faces(frame, embeddings, boxes):
             shared_employee_ids,
             shared_names
         )
-
         x1, y1, x2, y2 = map(int, box)
         label = f"{name} ({distance:.2f})"
         color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.7 else (0, 0, 255)
@@ -116,9 +113,10 @@ def identify_and_log_faces(frame, embeddings, boxes):
                     found_known = True
                     last_blink_times[employee_id] = now
                     log_recognition_event(employee_id, name, frame)
-            else:
-                print(f"[!] ตรวจพบ {name} แต่ไม่มีการกระพริบตา — อาจเป็นภาพหรือวิดีโอ")
-        else:
+            # else:
+            #     print(f"[!] ตรวจพบ {name} แต่ไม่มีการกระพริบตา — อาจเป็นภาพหรือวิดีโอ")
+            
+        elif employee_id == "Unknown" or distance >= 0.7:
             found_unknown = True
 
     now = time.time()
@@ -126,6 +124,7 @@ def identify_and_log_faces(frame, embeddings, boxes):
         pending_unknown_alert["time"] = None
         pending_unknown_alert["frame"] = None
     elif found_unknown:
+        now = time.time()
         if pending_unknown_alert["time"] is None:
             pending_unknown_alert["time"] = now
             pending_unknown_alert["frame"] = frame.copy()
@@ -141,75 +140,76 @@ def identify_and_log_faces(frame, embeddings, boxes):
             pending_unknown_alert["time"] = None
             pending_unknown_alert["frame"] = None
 
+
 def log_recognition_event(employee_id, name, frame):
     now = time.time()
     last_time = last_log_times.get(employee_id, 0)
 
-    if now - last_time >= MIN_LOG_INTERVAL:
-        now_dt = datetime.datetime.now()
-        hour = now_dt.hour
+    now_dt = datetime.datetime.now()
+    hour = now_dt.hour
+    if hour < 9:
+        new_event = "in"
+    elif hour >= 12:
+        new_event = "out"
+    else:
+        return
 
-        # กำหนดช่วงเวลาเข้า-ออก
-        if hour < 9:
-            new_event = "in"
-        elif hour >= 12:
-            new_event = "out"
-        else:
-            # ช่วง 9:00 - 11:59 จะไม่ log
-            return
+    last_state = person_states.get(employee_id, None)
+    if last_state == new_event and (now - last_time) < MIN_LOG_INTERVAL:
+        return
 
-        last_state = person_states.get(employee_id, None)
-        if last_state == new_event:
-            return  # ไม่ log ซ้ำ
-
-        try:
+    try:
+        payload = {"name": employee_id, "event": new_event}
+        res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
+        if res.ok:
             print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
             person_states[employee_id] = new_event
             last_log_times[employee_id] = now
-            send_log_with_image(name, employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
-        except Exception as e:
-            print("Logging error:", e)
+            send_log_with_image(name,employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
+        else:
+            print("Log failed:", res.status_code, res.text)
+    except Exception as e:
+        print("Logging error:", e)
 
-# def log_recognition_event(employee_id, name, frame):
+# def log_recognition_event(employee_id, name):
 #     now = time.time()
 #     last_time = last_log_times.get(employee_id, 0)
 
 #     if now - last_time >= MIN_LOG_INTERVAL:
-#         now_dt = datetime.datetime.now()
-#         hour = now_dt.hour
-#         new_event = "in" if hour < 12 else "out"
-
-#         last_state = person_states.get(employee_id, None)
-#         if last_state == new_event:
-#             return
+#         last_state = person_states.get(employee_id, "out")
+#         new_event = "in" if last_state == "out" else "out"
 
 #         try:
-#             print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
-#             person_states[employee_id] = new_event
-#             last_log_times[employee_id] = now
-#             send_log_with_image(name, employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
+#             payload = {"name": employee_id, "event": new_event}
+#             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
+#             if res.ok:
+#                 print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
+#                 person_states[employee_id] = new_event
+#                 last_log_times[employee_id] = now
+#             else:
+#                 print("Log failed:", res.status_code, res.text)
 #         except Exception as e:
 #             print("Logging error:", e)
 
-
-def send_log_with_image(name, employee_id, event, frame, server_url):
+def send_log_with_image(employee_id, name, event, frame, server_url):
     _, img_encoded = cv2.imencode('.jpg', frame)
 
     files = {
-        'snap_file': ('snap.jpg', img_encoded.tobytes(), 'image/jpeg')
+        'snap_file': ('snap.jpg', img_encoded.tobytes(), 'image/jpeg')  # ต้องใช้ชื่อฟิลด์ snap_file
     }
     data = {
-        'name': name,
+        'name': name,  # ตรงกับ Form(name)
         'event': event,
-        'employee_id': employee_id
+        'employee_id': employee_id  # ส่ง employee_id ด้วย
     }
+    print("Sending data:", data)
 
     try:
         response = requests.post(server_url, data=data, files=files, timeout=5)
         print('Status code:', response.status_code)
-        if response.headers.get('Content-Type', '').startswith('application/json'):
-            response_json = response.json()
-            print("Server response:", response_json)
+        response_json = response.json()
+        # คุณอาจใช้ response_json ในการตรวจสอบผลลัพธ์เพิ่มเติมได้
+
     except requests.exceptions.RequestException as e:
         print('API log image error:', e)
     except ValueError:

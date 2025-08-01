@@ -13,7 +13,7 @@ face_mesh = mp_face_mesh.FaceMesh(
 
 LEFT_EYE = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
-EAR_THRESHOLD = 0.21
+EAR_THRESHOLD = 0.18
 
 def eye_aspect_ratio(eye):
     A = np.linalg.norm(eye[1] - eye[5])
@@ -42,7 +42,7 @@ def detect_blink(frame):
             cv2.circle(frame, (x, y), 2, (255, 255, 0), -1)
 
         if avg_ear < EAR_THRESHOLD:
-            print(f"[INFO] Blink detected! Avg EAR: {avg_ear:.2f}")
+            # print(f"[INFO] Blink detected! Avg EAR: {avg_ear:.2f}")
             return True
 
     return False
