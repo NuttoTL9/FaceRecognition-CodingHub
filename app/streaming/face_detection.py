@@ -11,7 +11,7 @@ from recognition.face_utils import preprocess_face, find_closest_match
 from videostreamthread import videostreamthread
 from database.milvus_database import load_face_database
 from notify.notify import send_discord_alert
-from streaming.blink_detector import detect_blink
+# from streaming.blink_detector import detect_blink  # ตัดออก
 
 camera_streams = {}
 camera_frames = {}
@@ -19,13 +19,12 @@ embedding_lock = threading.Lock()
 
 person_states = {}
 last_log_times = {}
-last_blink_times = {}
 
 shared_embeddings = torch.empty(0, 512).to(DEVICE)
 shared_names = []
 shared_employee_ids = [] 
 
-should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag ข้ามโมดูล
+should_exit = [False]
 
 last_unknown_alert_time = 0
 UNKNOWN_ALERT_INTERVAL = 60 
@@ -54,10 +53,16 @@ def process_camera(rtsp_url, window_name):
         boxes, _probs, _landmarks = mtcnn.detect(frame_rgb, landmarks=True)
 
         if boxes is not None:
+            print(f"DEBUG: Detected {len(boxes)} faces")
             face_tensors, valid_boxes = extract_valid_faces(frame_rgb, boxes)
             if face_tensors:
+                print(f"DEBUG: {len(face_tensors)} valid faces after filtering")
                 embeddings = get_embeddings(face_tensors)
                 identify_and_log_faces(frame, embeddings, valid_boxes)
+            else:
+                print("DEBUG: No valid faces after filtering")
+        else:
+            print("DEBUG: No faces detected")
 
         camera_frames[window_name] = frame.copy()
 
@@ -103,19 +108,14 @@ def identify_and_log_faces(frame, embeddings, boxes):
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
+        # ตัด blink detection ออก
         if employee_id != "Unknown" and distance < 0.7:
-            blink_detected = detect_blink(frame)
+            print(f"DEBUG: Recognized known person - {name} (ID: {employee_id}) with distance: {distance}")
+            found_known = True
+            log_recognition_event(employee_id, name, frame)
+        else:
+            print(f"DEBUG: Unknown person or high distance - {name} (ID: {employee_id}) with distance: {distance}")
 
-            now = time.time()
-            last_blink_time = last_blink_times.get(employee_id, 0)
-            if blink_detected:
-                if now - last_blink_time > 5:
-                    found_known = True
-                    last_blink_times[employee_id] = now
-                    log_recognition_event(employee_id, name, frame)
-            # else:
-            #     print(f"[!] ตรวจพบ {name} แต่ไม่มีการกระพริบตา — อาจเป็นภาพหรือวิดีโอ")
-            
         elif employee_id == "Unknown" or distance >= 0.7:
             found_unknown = True
 
@@ -147,49 +147,48 @@ def log_recognition_event(employee_id, name, frame):
 
     now_dt = datetime.datetime.now()
     hour = now_dt.hour
+    
+    # Debug: Print current time and conditions
+    print(f"DEBUG: Current hour: {hour}, employee_id: {employee_id}, name: {name}")
+    
     if hour < 9:
         new_event = "in"
     elif hour >= 12:
         new_event = "out"
     else:
+        print(f"DEBUG: Hour {hour} is between 9-12, skipping log")
         return
 
     last_state = person_states.get(employee_id, None)
-    if last_state == new_event and (now - last_time) < MIN_LOG_INTERVAL:
+    time_since_last = now - last_time
+    
+    print(f"DEBUG: new_event: {new_event}, last_state: {last_state}, time_since_last: {time_since_last}, MIN_LOG_INTERVAL: {MIN_LOG_INTERVAL}")
+    
+    if last_state == new_event and time_since_last < MIN_LOG_INTERVAL:
+        print(f"DEBUG: Skipping log - same event {new_event} within interval")
+        return
+
+    # Debug: Print LOG_EVENT_URL to check if it's configured
+    print(f"LOG_EVENT_URL: {LOG_EVENT_URL}")
+    
+    if not LOG_EVENT_URL:
+        print("ERROR: LOG_EVENT_URL is not configured!")
         return
 
     try:
         payload = {"name": employee_id, "event": new_event}
+        print(f"Sending payload: {payload} to {LOG_EVENT_URL}")
         res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
         if res.ok:
             print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
             person_states[employee_id] = new_event
             last_log_times[employee_id] = now
-            send_log_with_image(name,employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
+            send_log_with_image(name, employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
         else:
             print("Log failed:", res.status_code, res.text)
     except Exception as e:
         print("Logging error:", e)
 
-# def log_recognition_event(employee_id, name):
-#     now = time.time()
-#     last_time = last_log_times.get(employee_id, 0)
-
-#     if now - last_time >= MIN_LOG_INTERVAL:
-#         last_state = person_states.get(employee_id, "out")
-#         new_event = "in" if last_state == "out" else "out"
-
-#         try:
-#             payload = {"name": employee_id, "event": new_event}
-#             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-#             if res.ok:
-#                 print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
-#                 person_states[employee_id] = new_event
-#                 last_log_times[employee_id] = now
-#             else:
-#                 print("Log failed:", res.status_code, res.text)
-#         except Exception as e:
-#             print("Logging error:", e)
 
 def send_log_with_image(employee_id, name, event, frame, server_url):
     _, img_encoded = cv2.imencode('.jpg', frame)
@@ -203,13 +202,16 @@ def send_log_with_image(employee_id, name, event, frame, server_url):
         'employee_id': employee_id  # ส่ง employee_id ด้วย
     }
     print("Sending data:", data)
+    print(f"Sending to server_url: {server_url}")
 
     try:
         response = requests.post(server_url, data=data, files=files, timeout=5)
         print('Status code:', response.status_code)
-        response_json = response.json()
-        # คุณอาจใช้ response_json ในการตรวจสอบผลลัพธ์เพิ่มเติมได้
-
+        if response.headers.get('content-type', '').startswith('application/json'):
+            response_json = response.json()
+            print('Response JSON:', response_json)
+        else:
+            print('Response text:', response.text)
     except requests.exceptions.RequestException as e:
         print('API log image error:', e)
     except ValueError:
