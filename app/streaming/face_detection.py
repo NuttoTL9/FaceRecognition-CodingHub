@@ -11,7 +11,7 @@ from recognition.face_utils import preprocess_face, find_closest_match
 from videostreamthread import videostreamthread
 from database.milvus_database import load_face_database
 from notify.notify import send_discord_alert
-from streaming.blink_detector import detect_blink
+# from streaming.blink_detector import detect_blink  # ตัดออก
 
 camera_streams = {}
 camera_frames = {}
@@ -19,13 +19,12 @@ embedding_lock = threading.Lock()
 
 person_states = {}
 last_log_times = {}
-last_blink_times = {}
 
 shared_embeddings = torch.empty(0, 512).to(DEVICE)
 shared_names = []
 shared_employee_ids = [] 
 
-should_exit = [False]  # ใช้ list เพื่อแชร์ mutable flag ข้ามโมดูล
+should_exit = [False]
 
 last_unknown_alert_time = 0
 UNKNOWN_ALERT_INTERVAL = 60 
@@ -88,6 +87,7 @@ def identify_and_log_faces(frame, embeddings, boxes):
     global last_unknown_alert_time, pending_unknown_alert
     found_known = False
     found_unknown = False
+    logging_now_set = set()  # 🔸 กันไม่ให้ส่ง log ซ้ำใน frame เดียว
 
     for embedding, box in zip(embeddings, boxes):
         employee_id, name, distance = find_closest_match(
@@ -96,27 +96,21 @@ def identify_and_log_faces(frame, embeddings, boxes):
             shared_employee_ids,
             shared_names
         )
+
         x1, y1, x2, y2 = map(int, box)
         label = f"{name} ({distance:.2f})"
-        color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.7 else (0, 0, 255)
+        color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.6 else (0, 0, 255)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        if employee_id != "Unknown" and distance < 0.7:
-            blink_detected = detect_blink(frame)
+        if employee_id != "Unknown" and distance < 0.6:
+            found_known = True
+            if employee_id not in logging_now_set:
+                logging_now_set.add(employee_id)
+                log_recognition_event(employee_id, name, frame)
 
-            now = time.time()
-            last_blink_time = last_blink_times.get(employee_id, 0)
-            if blink_detected:
-                if now - last_blink_time > 5:
-                    found_known = True
-                    last_blink_times[employee_id] = now
-                    log_recognition_event(employee_id, name, frame)
-            # else:
-            #     print(f"[!] ตรวจพบ {name} แต่ไม่มีการกระพริบตา — อาจเป็นภาพหรือวิดีโอ")
-            
-        elif employee_id == "Unknown" or distance >= 0.7:
+        elif employee_id == "Unknown" or distance >= 0.6:
             found_unknown = True
 
     now = time.time()
@@ -155,52 +149,42 @@ def log_recognition_event(employee_id, name, frame):
         return
 
     last_state = person_states.get(employee_id, None)
-    if last_state == new_event and (now - last_time) < MIN_LOG_INTERVAL:
+    
+    if (now - last_time) < MIN_LOG_INTERVAL and last_state == new_event:
         return
 
     try:
         payload = {"name": employee_id, "event": new_event}
         res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
         if res.ok:
-            print(f"Logged {name} [{new_event}] at {now_dt.isoformat()}")
+            print(f"✅ Log {name} [{new_event}] ที่ {now_dt.isoformat()}")
             person_states[employee_id] = new_event
             last_log_times[employee_id] = now
-            send_log_with_image(name,employee_id, new_event, frame, LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/'))
+
+            # 👉 ส่งภาพเฉพาะเมื่อ log สำเร็จเท่านั้น
+            send_log_with_image(
+                employee_id, name, new_event, frame,
+                LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/')
+            )
+
         else:
-            print("Log failed:", res.status_code, res.text)
+            print("❌ Log ล้มเหลว:", res.status_code, res.text)
+
     except Exception as e:
-        print("Logging error:", e)
+        print("❌ Logging error:", e)
 
-# def log_recognition_event(employee_id, name):
-#     now = time.time()
-#     last_time = last_log_times.get(employee_id, 0)
 
-#     if now - last_time >= MIN_LOG_INTERVAL:
-#         last_state = person_states.get(employee_id, "out")
-#         new_event = "in" if last_state == "out" else "out"
-
-#         try:
-#             payload = {"name": employee_id, "event": new_event}
-#             res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-#             if res.ok:
-#                 print(f"Logged {name} [{new_event}] at {datetime.datetime.now().isoformat()}")
-#                 person_states[employee_id] = new_event
-#                 last_log_times[employee_id] = now
-#             else:
-#                 print("Log failed:", res.status_code, res.text)
-#         except Exception as e:
-#             print("Logging error:", e)
 
 def send_log_with_image(employee_id, name, event, frame, server_url):
     _, img_encoded = cv2.imencode('.jpg', frame)
 
     files = {
-        'snap_file': ('snap.jpg', img_encoded.tobytes(), 'image/jpeg')  # ต้องใช้ชื่อฟิลด์ snap_file
+        'snap_file': ('snap.jpg', img_encoded.tobytes(), 'image/jpeg')
     }
     data = {
-        'name': name,  # ตรงกับ Form(name)
-        'event': event,
-        'employee_id': employee_id  # ส่ง employee_id ด้วย
+        'employee_id': employee_id,
+        'name': name,  # แก้ไขให้ตรงกับ FastAPI endpoint
+        'event': event
     }
     print("Sending data:", data)
 
@@ -208,9 +192,9 @@ def send_log_with_image(employee_id, name, event, frame, server_url):
         response = requests.post(server_url, data=data, files=files, timeout=5)
         print('Status code:', response.status_code)
         response_json = response.json()
-        # คุณอาจใช้ response_json ในการตรวจสอบผลลัพธ์เพิ่มเติมได้
-
+        print(f"✅ Log พร้อมภาพบันทึกแล้ว: {employee_id} [{event}] ชื่อจริง: {name}")
     except requests.exceptions.RequestException as e:
         print('API log image error:', e)
     except ValueError:
         print('Response is not valid JSON:', response.text)
+

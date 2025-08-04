@@ -7,6 +7,7 @@ from facenet_pytorch import MTCNN, InceptionResnetV1
 from databases import Database
 from dotenv import load_dotenv
 from PIL import Image
+from starlette.responses import StreamingResponse
 
 import datetime
 import asyncpg
@@ -16,6 +17,7 @@ import requests
 import torch
 import io
 import base64
+import mimetypes
 
 load_dotenv()
 
@@ -126,11 +128,11 @@ class EmployeeCreate(BaseModel):
     date_of_joining: str
     date_of_birth: str
     company: str
-
+    
 def get_milvus_connection():
     try:
         if not connections.has_connection(alias="default"):
-            connections.connect(alias="default", host="milvus-standalone", port=19530)
+            connections.connect(alias="default", host="192.168.1.27", port=19530)
             print("Connected to Milvus")
     except Exception as e:
         print(f"Failed to connect Milvus: {e}")
@@ -155,7 +157,7 @@ def create_employee_checkin(employee_id: str, log_type: str):
     }
 
     try:
-        res = requests.post(url, json=data, auth=auth, headers=headers, timeout=5)
+        res = requests.post(url, json=data, auth=auth, headers=headers, timeout=30)
         if res.ok:
             print(f"Employee Checkin saved: {res.json()}")
             return True
@@ -189,7 +191,7 @@ async def check_employee_exists(employee_id: str) -> str | None:
     auth = (FRAPPE_API_KEY, FRAPPE_API_SECRET)
 
     try:
-        res = requests.get(url, params=params, auth=auth, timeout=5)
+        res = requests.get(url, params=params, auth=auth, timeout=30)
         if res.ok:
             data = res.json()
             if data["data"]:
@@ -220,7 +222,7 @@ def process_image_to_base64(image_data: bytes, max_size: tuple = (400, 400)) -> 
     except Exception as e:
         print(f"Error processing image: {e}")
         return None
-    
+
 def insert_face_vector(employee_id: str, name: str, embedding: list[float]):
     if len(embedding) != 512:
         raise ValueError("embedding length must be 512")
@@ -304,14 +306,12 @@ async def log_event(data: LogData, _=Depends(get_milvus_connection)):
 
 @app.post("/log_event_with_snap/")
 async def log_event_with_snap(
+    employee_id: str = Form(...),
     name: str = Form(...),
     event: str = Form(...),
     snap_file: UploadFile = File(None),
     _=Depends(get_milvus_connection)
 ):
-    """
-    บันทึก log event พร้อมรูปภาพ snap
-    """
     bangkok = pytz.timezone("Asia/Bangkok")
     now_local = datetime.datetime.now(bangkok)
     now_local_naive = now_local.replace(tzinfo=None)
@@ -319,7 +319,6 @@ async def log_event_with_snap(
     snap_image_b64 = None
     image_filename = None
 
-    # ประมวลผลภาพถ้ามี
     if snap_file and snap_file.filename:
         try:
             image_data = await snap_file.read()
@@ -332,7 +331,7 @@ async def log_event_with_snap(
 
     try:
         collection = get_or_create_collection()
-        expr = f'employee_id == "{name}"'
+        expr = f'employee_id == "{employee_id}"'
         collection.load()
         result = collection.query(expr=expr, output_fields=["employee_id", "name"])
 
@@ -343,7 +342,7 @@ async def log_event_with_snap(
         VALUES (:employee_id, :name, :timestamp, :event, :snap_image, :image_filename)
         """
         values = {
-            "employee_id": name,
+            "employee_id": employee_id,
             "name": real_name,
             "timestamp": now_local_naive,
             "event": event,
@@ -352,11 +351,11 @@ async def log_event_with_snap(
         }
         await database.execute(query=query, values=values)
 
-        employee_id = await check_employee_exists(name)
-        if employee_id:
+        employee_id_check = await check_employee_exists(employee_id)
+        if employee_id_check:
             create_employee_checkin(employee_id, event)
 
-        print(f"✅ Log พร้อมภาพบันทึกแล้ว: {name} [{event}] ชื่อจริง: {real_name}")
+        print(f"✅ Log พร้อมภาพบันทึกแล้ว: {employee_id} [{event}] ชื่อจริง: {real_name}")
         return {
             "status": "logged",
             "has_image": snap_image_b64 is not None,
@@ -371,7 +370,7 @@ async def log_event_with_snap(
 @app.get("/get_log_image/{log_id}")
 async def get_log_image(log_id: int):
     """
-    ดึงภาพจาก log โดยใช้ log_id
+    ดึงภาพจาก log และส่งเป็นรูปภาพจริง (รองรับ image/jpeg, image/png)
     """
     try:
         query = "SELECT snap_image, image_filename FROM face_recog_log WHERE id = :log_id"
@@ -380,17 +379,28 @@ async def get_log_image(log_id: int):
         if not result:
             raise HTTPException(status_code=404, detail="Log not found")
 
-        if not result["snap_image"]:
+        snap_image_base64 = result["snap_image"]
+        filename = result["image_filename"] or "image.jpg"
+
+        if not snap_image_base64:
             raise HTTPException(status_code=404, detail="No image found for this log")
 
-        return {
-            "image_base64": result["snap_image"],
-            "filename": result["image_filename"]
-        }
+        # แปลง base64 เป็น binary
+        image_bytes = base64.b64decode(snap_image_base64)
+
+        # ตรวจสอบ MIME type จากชื่อไฟล์
+        mime_type, _ = mimetypes.guess_type(filename)
+        if mime_type not in ("image/jpeg", "image/png"):
+            mime_type = "application/octet-stream"  # fallback
+
+        return StreamingResponse(io.BytesIO(image_bytes), media_type=mime_type, headers={
+            "Content-Disposition": f"inline; filename={filename}"
+        })
 
     except Exception as e:
         print(f"❌ Error retrieving image: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve image")
+
 
 
 @app.get("/get_recent_logs/")
@@ -485,38 +495,162 @@ def delete_employee_embeddings(data: DeleteRequest):
     except Exception as e:
         print(f"Error deleting embeddings: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete embeddings")
-    
+
+def get_gender_options():
+    """ดึง Gender options จาก ERPNext"""
+    try:
+        res = requests.get(
+            f"{FRAPPE_URL}/api/resource/Gender",
+            auth=(FRAPPE_API_KEY, FRAPPE_API_SECRET),
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        if res.ok:
+            return res.json().get("data", [])
+        return []
+    except:
+        return []
+
+def get_company_options():
+    """ดึงรายชื่อบริษัทจาก ERPNext"""
+    try:
+        res = requests.get(
+            f"{FRAPPE_URL}/api/resource/Company",
+            auth=(FRAPPE_API_KEY, FRAPPE_API_SECRET),
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        if res.ok:
+            companies = res.json().get("data", [])
+            # ดึงเฉพาะชื่อบริษัท
+            company_names = [company.get("name", "") for company in companies if company.get("name")]
+            return company_names
+        return []
+    except Exception as e:
+        print(f"Error fetching companies: {e}")
+        return []
+
+def update_employee_image(employee_id: str, image_base64: str):
+    """อัพเดตรูปภาพของ Employee ใน ERPNext"""
+    try:
+        print(f"🔄 กำลังอัพเดตรูปภาพ Employee {employee_id}...")
+        print(f"📏 ขนาดรูปภาพ (base64): {len(image_base64)} characters")
+        
+        # สร้าง payload สำหรับอัพเดตรูปภาพ
+        update_payload = {
+            "image": image_base64
+        }
+        
+        print(f"📡 ส่งคำขอ PUT ไปยัง: {FRAPPE_URL}/api/resource/Employee/{employee_id}")
+        
+        update_res = requests.put(
+            f"{FRAPPE_URL}/api/resource/Employee/{employee_id}",
+            json=update_payload,
+            auth=(FRAPPE_API_KEY, FRAPPE_API_SECRET),
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        
+        print(f"📡 ERPNext Response Status: {update_res.status_code}")
+        
+        if update_res.ok:
+            print(f"✅ อัพเดตรูปภาพ Employee {employee_id} สำเร็จ")
+            print(f"📋 Response: {update_res.text}")
+            return True
+        else:
+            print(f"❌ อัพเดตรูปภาพ Employee {employee_id} ไม่สำเร็จ: {update_res.status_code} {update_res.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ เกิดข้อผิดพลาดในการอัพเดตรูปภาพ Employee: {str(e)}")
+        return False
+
 @app.post("/api/resource/Employee")
 def create_employee(data: EmployeeCreate, _=Depends(get_milvus_connection)):
+    # แปลง gender จากภาษาไทยเป็นภาษาอังกฤษ
+    gender_mapping = {
+        "ชาย": "Male",
+        "หญิง": "Female"
+    }
+
+    mapped_gender = gender_mapping.get(data.gender, "Male")
+
     payload = {
         "first_name": data.firstname,
         "last_name": data.lastname,
-        "gender": data.gender,
+        "gender": mapped_gender,
         "date_of_joining": data.date_of_joining,
         "date_of_birth": data.date_of_birth,
         "company": data.company
     }
 
     try:
+        print(f"🔄 ส่งคำขอสร้าง Employee ไปยัง ERPNext: {FRAPPE_URL}")
+        print(f"📋 Payload: {payload}")
+
         res = requests.post(
             f"{FRAPPE_URL}/api/resource/Employee",
             json=payload,
             auth=(FRAPPE_API_KEY, FRAPPE_API_SECRET),
             headers={"Content-Type": "application/json"},
-            timeout=5
+            timeout=30
         )
+
+        print(f"📡 ERPNext Response Status: {res.status_code}")
+
         if not res.ok:
-            print(f"ERPNext API Response: {res.text}")
+            print(f"❌ ERPNext API Response: {res.text}")
             raise HTTPException(status_code=res.status_code, detail=f"ERPNext error: {res.text}")
 
-        employee_id = res.json()["data"]["name"]
+        response_data = res.json()
+        employee_id = response_data["data"]["name"]
         fullname = f"{data.firstname} {data.lastname}"
         print(f"✅ Employee Created: {employee_id}")
+
         return {
             "status": "success",
             "employee_id": employee_id,
             "fullname": fullname
         }
 
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=500, detail="ERPNext timeout: ไม่สามารถเชื่อมต่อได้ภายใน 30 วินาที")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=500, detail="ERPNext connection error: ไม่สามารถเชื่อมต่อกับ ERPNext ได้")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาดในการสร้าง Employee: {str(e)}")
+
+
+@app.get("/api/gender-options/")
+def get_available_gender_options():
+    """ดึง Gender options ที่มีอยู่ใน ERPNext"""
+    try:
+        gender_options = get_gender_options()
+        return {
+            "status": "success",
+            "gender_options": gender_options,
+            "available_options": ["Male", "Female"]  # fallback options
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "available_options": ["Male", "Female"]  # fallback options
+        }
+
+@app.get("/api/company-options/")
+def get_available_company_options():
+    """ดึงรายชื่อบริษัทที่มีอยู่ใน ERPNext"""
+    try:
+        company_options = get_company_options()
+        return {
+            "status": "success",
+            "company_options": company_options,
+            "available_options": company_options if company_options else ["Default Company"]  # fallback options
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "available_options": ["Default Company"]  # fallback options
+        }

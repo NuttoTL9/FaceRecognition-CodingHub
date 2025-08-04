@@ -34,18 +34,34 @@ def create_milvus_collection():
     milvus_collection.load()
     return milvus_collection
 
+
 def load_face_database():
+    global milvus_collection
+    if milvus_collection is None:
+        create_milvus_collection()  # สร้างและเชื่อมต่อก่อน
     vectors, names, employee_ids = [], [], []
     try:
         milvus_collection.load()
-        results = milvus_collection.query(expr="", output_fields=["employee_id", "name", "embedding"], limit=10000)
+        # ใช้ expr="id >= 0" เพื่อดึงข้อมูลทั้งหมดแทน expr=""
+        results = milvus_collection.query(expr="id >= 0", output_fields=["employee_id", "name", "embedding"], limit=10000)
+        if not results:
+            print("Milvus: No data found in collection")
+            return torch.empty(0, 512).to(DEVICE), [], []
+
         for item in results:
-            vectors.append(torch.tensor(item['embedding']).to(DEVICE))
-            names.append(item['name'])
-            employee_ids.append(item['employee_id'])
+            emb = item.get('embedding')
+            if emb is None:
+                continue
+            vectors.append(torch.tensor(emb, dtype=torch.float32).to(DEVICE))
+            names.append(item.get('name', 'Unknown'))
+            employee_ids.append(item.get('employee_id', 'Unknown'))
+        
         if not vectors:
             return torch.empty(0, 512).to(DEVICE), names, employee_ids
+        
         return torch.stack(vectors), names, employee_ids
+
     except Exception as e:
         print("Failed to load from Milvus:", e)
         return torch.empty(0, 512).to(DEVICE), [], []
+
