@@ -29,6 +29,8 @@ POSTGRES_DB = os.getenv("POSTGRES_DB")
 FRAPPE_URL = os.getenv("FRAPPE_URL")
 FRAPPE_API_KEY = os.getenv("FRAPPE_API_KEY")
 FRAPPE_API_SECRET = os.getenv("FRAPPE_API_SECRET")
+MILVUS_HOST = os.getenv("MILVUS_HOST")
+MILVUS_PORT = os.getenv("MILVUS_PORT")
 
 
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
@@ -132,7 +134,7 @@ class EmployeeCreate(BaseModel):
 def get_milvus_connection():
     try:
         if not connections.has_connection(alias="default"):
-            connections.connect(alias="default", host="192.168.1.27", port=19530)
+            connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
             print("Connected to Milvus")
     except Exception as e:
         print(f"Failed to connect Milvus: {e}")
@@ -282,6 +284,7 @@ async def log_event(data: LogData, _=Depends(get_milvus_connection)):
         INSERT INTO face_recog_log (employee_id, name, timestamp, event, snap_image, image_filename)
         VALUES (:employee_id, :name, :timestamp, :event, :snap_image, :image_filename)
         """
+        
         values = {
             "employee_id": data.name,
             "name": real_name,

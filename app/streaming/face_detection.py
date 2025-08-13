@@ -11,7 +11,6 @@ from recognition.face_utils import preprocess_face, find_closest_match
 from videostreamthread import videostreamthread
 from database.milvus_database import load_face_database
 from notify.notify import send_discord_alert
-# from streaming.blink_detector import detect_blink  # ตัดออก
 
 camera_streams = {}
 camera_frames = {}
@@ -87,7 +86,7 @@ def identify_and_log_faces(frame, embeddings, boxes):
     global last_unknown_alert_time, pending_unknown_alert
     found_known = False
     found_unknown = False
-    logging_now_set = set()  # 🔸 กันไม่ให้ส่ง log ซ้ำใน frame เดียว
+    logging_now_set = set() 
 
     for embedding, box in zip(embeddings, boxes):
         employee_id, name, distance = find_closest_match(
@@ -99,18 +98,18 @@ def identify_and_log_faces(frame, embeddings, boxes):
 
         x1, y1, x2, y2 = map(int, box)
         label = f"{name} ({distance:.2f})"
-        color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.6 else (0, 0, 255)
+        color = (0, 255, 0) if employee_id != "Unknown" and distance < 0.7 else (0, 0, 255)
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        if employee_id != "Unknown" and distance < 0.6:
+        if employee_id != "Unknown" and distance < 0.65:
             found_known = True
             if employee_id not in logging_now_set:
                 logging_now_set.add(employee_id)
                 log_recognition_event(employee_id, name, frame)
 
-        elif employee_id == "Unknown" or distance >= 0.6:
+        elif employee_id == "Unknown" or distance > 0.65:
             found_unknown = True
 
     now = time.time()
@@ -157,21 +156,20 @@ def log_recognition_event(employee_id, name, frame):
         payload = {"name": employee_id, "event": new_event}
         res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
         if res.ok:
-            print(f"✅ Log {name} [{new_event}] ที่ {now_dt.isoformat()}")
+            print(f"Log {name} [{new_event}] ที่ {now_dt.isoformat()}")
             person_states[employee_id] = new_event
             last_log_times[employee_id] = now
 
-            # 👉 ส่งภาพเฉพาะเมื่อ log สำเร็จเท่านั้น
             send_log_with_image(
                 employee_id, name, new_event, frame,
                 LOG_EVENT_URL.replace('/log_event/', '/log_event_with_snap/')
             )
 
         else:
-            print("❌ Log ล้มเหลว:", res.status_code, res.text)
+            print("Log ล้มเหลว:", res.status_code, res.text)
 
     except Exception as e:
-        print("❌ Logging error:", e)
+        print("Logging error:", e)
 
 
 
@@ -183,7 +181,7 @@ def send_log_with_image(employee_id, name, event, frame, server_url):
     }
     data = {
         'employee_id': employee_id,
-        'name': name,  # แก้ไขให้ตรงกับ FastAPI endpoint
+        'name': name,
         'event': event
     }
     print("Sending data:", data)
@@ -192,7 +190,6 @@ def send_log_with_image(employee_id, name, event, frame, server_url):
         response = requests.post(server_url, data=data, files=files, timeout=5)
         print('Status code:', response.status_code)
         response_json = response.json()
-        print(f"✅ Log พร้อมภาพบันทึกแล้ว: {employee_id} [{event}] ชื่อจริง: {name}")
     except requests.exceptions.RequestException as e:
         print('API log image error:', e)
     except ValueError:

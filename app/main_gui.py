@@ -35,9 +35,7 @@ class AddFaceDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # แสดงภาพตัวอย่าง
         if self.current_frame is not None:
-            # ตรวจสอบจำนวนใบหน้าในภาพ
             frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
             boxes, _ = mtcnn.detect(frame_rgb)
             face_count = len(boxes) if boxes is not None else 0
@@ -45,7 +43,6 @@ class AddFaceDialog(QDialog):
             preview_label = QLabel(f"ภาพตัวอย่าง (พบใบหน้า: {face_count} ใบหน้า):")
             layout.addWidget(preview_label)
             
-            # แปลงภาพเป็น QPixmap และวาดกรอบรอบใบหน้า
             display_frame = self.current_frame.copy()
             if boxes is not None:
                 for box in boxes:
@@ -65,39 +62,32 @@ class AddFaceDialog(QDialog):
             image_label.setStyleSheet("border: 1px solid gray; padding: 5px;")
             layout.addWidget(image_label)
         
-        # ฟอร์มสำหรับกรอกข้อมูล
         form_layout = QFormLayout()
         
-        # ชื่อจริง
         self.firstname_edit = QLineEdit()
         form_layout.addRow("ชื่อจริง:", self.firstname_edit)
         
-        # นามสกุล
         self.lastname_edit = QLineEdit()
         form_layout.addRow("นามสกุล:", self.lastname_edit)
         
-        # เพศ
         self.gender_combo = QComboBox()
         self.gender_combo.addItems(["Male", "Female"])
         form_layout.addRow("เพศ:", self.gender_combo)
         
-        # วันที่เริ่มงาน
         self.date_of_joining_edit = QDateEdit()
         self.date_of_joining_edit.setDate(QDate.currentDate())
         self.date_of_joining_edit.setCalendarPopup(True)
         form_layout.addRow("วันที่เริ่มงาน:", self.date_of_joining_edit)
         
-        # วันเกิด
         self.date_of_birth_edit = QDateEdit()
         self.date_of_birth_edit.setDate(QDate.currentDate())
         self.date_of_birth_edit.setCalendarPopup(True)
         form_layout.addRow("วันเกิด:", self.date_of_birth_edit)
         
-        # บริษัท
         company_layout = QHBoxLayout()
         self.company_combo = QComboBox()
-        self.company_combo.setEditable(True)  # ให้พิมพ์เพิ่มได้
-        self.company_combo.setInsertPolicy(QComboBox.InsertAtTop)  # เพิ่มใหม่ไว้ด้านบน
+        self.company_combo.setEditable(True)
+        self.company_combo.setInsertPolicy(QComboBox.InsertAtTop)
         
         self.refresh_company_btn = QPushButton("🔄")
         self.refresh_company_btn.setToolTip("รีเฟรชรายชื่อบริษัท")
@@ -110,7 +100,6 @@ class AddFaceDialog(QDialog):
         
         layout.addLayout(form_layout)
         
-        # ปุ่มบันทึกและยกเลิก
         button_layout = QHBoxLayout()
         self.save_button = QPushButton("บันทึก")
         self.save_button.clicked.connect(self.save_employee)
@@ -121,13 +110,11 @@ class AddFaceDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
         
-        # ข้อความแนะนำ
         info_label = QLabel("💡 หมายเหตุ: ระบบจะใช้ภาพปัจจุบันจากกล้องเพื่อบันทึกใบหน้า\n📋 สามารถเลือกบริษัทที่มีอยู่หรือพิมพ์ชื่อใหม่ได้\n📸 รูปภาพใบหน้าจะถูกส่งไปยัง Employee profile ด้วย")
         info_label.setStyleSheet("color: #666; font-size: 10pt; padding: 5px;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
         
-        # ข้อความสถานะ
         self.status_text = QTextEdit()
         self.status_text.setMaximumHeight(100)
         self.status_text.setReadOnly(True)
@@ -135,7 +122,6 @@ class AddFaceDialog(QDialog):
         
         self.setLayout(layout)
         
-        # โหลดรายชื่อบริษัท
         self.load_company_options()
     
     def log_status(self, message):
@@ -156,15 +142,12 @@ class AddFaceDialog(QDialog):
                     self.log_status(f"📋 บริษัทที่มี: {', '.join(companies[:5])}{'...' if len(companies) > 5 else ''}")
             else:
                 self.log_status("⚠️ ไม่สามารถโหลดรายชื่อบริษัทได้")
-                # เพิ่มค่า default
                 self.company_combo.addItems(["Default Company"])
         except Exception as e:
             self.log_status(f"❌ เกิดข้อผิดพลาดในการโหลดรายชื่อบริษัท: {str(e)}")
-            # เพิ่มค่า default
             self.company_combo.addItems(["Default Company"])
     
     def save_employee(self):
-        # ตรวจสอบข้อมูลที่กรอก
         firstname = self.firstname_edit.text().strip()
         lastname = self.lastname_edit.text().strip()
         gender = self.gender_combo.currentText()
@@ -182,7 +165,6 @@ class AddFaceDialog(QDialog):
         
         self.log_status("เริ่มต้นการบันทึกข้อมูลพนักงาน...")
         
-        # ตรวจสอบการเชื่อมต่อ FastAPI
         try:
             test_response = requests.get(f"{FASTAPI_URL}/docs", timeout=5)
             if not test_response.ok:
@@ -195,7 +177,6 @@ class AddFaceDialog(QDialog):
             return
         
         try:
-            # สร้าง Employee ใน ERPNext
             employee_payload = {
                 "firstname": firstname,
                 "lastname": lastname,
@@ -223,7 +204,6 @@ class AddFaceDialog(QDialog):
             
             self.log_status(f"✅ ได้ employee_id: {employee_id}")
             
-            # ประมวลผลภาพใบหน้า
             frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
             boxes, _ = mtcnn.detect(frame_rgb)
             
@@ -264,7 +244,6 @@ class AddFaceDialog(QDialog):
                 break
             
             if face_added:
-                # รีโหลดฐานข้อมูลใบหน้า
                 reload_face_database()
                 QMessageBox.information(self, "สำเร็จ", f"เพิ่มพนักงาน {firstname} {lastname} เรียบร้อยแล้ว")
                 self.accept()
@@ -300,7 +279,6 @@ class FaceRecognitionApp(QWidget):
     def init_ui(self):
         main_layout = QHBoxLayout(self)
 
-        # ---------- Log Panel ----------
         self.log_panel = QVBoxLayout()
         self.log_container = QWidget()
         self.log_container.setLayout(self.log_panel)
@@ -310,14 +288,12 @@ class FaceRecognitionApp(QWidget):
         self.scroll.setWidget(self.log_container)
         self.scroll.setMinimumWidth(300)
 
-        # ---------- Camera Panel ----------
         self.input_rtsp = QLineEdit(self)
         self.input_rtsp.setPlaceholderText("Enter RTSP URL or leave empty for webcam")
 
         self.connect_btn = QPushButton("Connect Camera")
         self.connect_btn.clicked.connect(self.change_camera)
 
-        # ปุ่ม Add Face
         self.add_face_btn = QPushButton("Add Face")
         self.add_face_btn.clicked.connect(self.show_add_face_dialog)
         self.add_face_btn.setStyleSheet("""
@@ -337,14 +313,12 @@ class FaceRecognitionApp(QWidget):
             }
         """)
 
-        # กล้อง
         self.camera_label = QLabel(self)
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.camera_label.setStyleSheet("background-color: #ddd;")  # สีพื้นหลังเวลาไม่มีภาพ
         self.camera_label.resizeEvent = lambda event: self.update_frame()
 
-        # Layout กล้องฝั่งขวา
         camera_control_layout = QVBoxLayout()
         camera_control_layout.setContentsMargins(0, 0, 0, 0)
         camera_control_layout.setSpacing(5)
@@ -356,12 +330,11 @@ class FaceRecognitionApp(QWidget):
         camera_widget = QWidget()
         camera_widget.setLayout(camera_control_layout)
 
-        # ---------- Add to Main Layout ----------
         main_layout.addWidget(self.scroll)
         main_layout.addWidget(camera_widget)
 
-        main_layout.setStretch(0, 1)  # log
-        main_layout.setStretch(1, 4)  # camera
+        main_layout.setStretch(0, 1)
+        main_layout.setStretch(1, 4)
 
         self.setLayout(main_layout)
 
@@ -377,32 +350,26 @@ class FaceRecognitionApp(QWidget):
         self.timer.start(30)
 
     def show_add_face_dialog(self):
-        # รับภาพปัจจุบันจากกล้อง
         current_frame = camera_frames.get(self.video_source_name)
         if current_frame is None:
             QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง กรุณาตรวจสอบการเชื่อมต่อกล้อง")
             return
         
-        # ตรวจสอบว่ามีใบหน้าในภาพหรือไม่
         frame_rgb = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
         boxes, _ = mtcnn.detect(frame_rgb)
         if boxes is None or len(boxes) == 0:
             QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง กรุณาตรวจสอบให้แน่ใจว่ามีใบหน้าอยู่ในกล้อง")
             return
         
-        # ปิดการใช้งานปุ่มชั่วคราว
         self.add_face_btn.setEnabled(False)
         self.add_face_btn.setText("กำลังประมวลผล...")
         
         try:
-            # แสดงป๊อปอัพสำหรับเพิ่มใบหน้า
             dialog = AddFaceDialog(self, current_frame)
             if dialog.exec_() == QDialog.Accepted:
-                # รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่มสำเร็จ
                 self.known_embeddings, self.known_names, self.known_employee_ids = load_face_database()
                 print("✅ รีโหลดฐานข้อมูลใบหน้าเรียบร้อย")
         finally:
-            # เปิดการใช้งานปุ่มอีกครั้ง
             self.add_face_btn.setEnabled(True)
             self.add_face_btn.setText("Add Face")
 
@@ -443,7 +410,7 @@ class FaceRecognitionApp(QWidget):
                 self.known_names,
             )
 
-            if match_name and match_name.lower() != "unknown" and match_dist < 0.6:
+            if match_name and match_name.lower() != "unknown" and match_dist < 0.7:
                 event_type = "in" if datetime.now().hour < 12 else "out"
                 now = time.time()
                 last_time = self.last_log_times.get(match_employee_id, 0)
@@ -453,11 +420,10 @@ class FaceRecognitionApp(QWidget):
                     continue
 
                 if match_employee_id in logging_now_set:
-                    continue  # ป้องกัน log ซ้ำใน frame เดียวกัน
+                    continue
                 logging_now_set.add(match_employee_id)
 
                 try:
-                    # ส่ง log
                     payload = {"name": match_employee_id, "event": event_type}
                     res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
                     if res.ok:

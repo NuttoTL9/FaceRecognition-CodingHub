@@ -12,14 +12,14 @@ def capture_and_save():
 
         cam_choice = input(f"เลือกกล้องที่จะใช้ (1 - {len(camera_streams)}): ").strip()
         if not cam_choice.isdigit() or int(cam_choice) < 1 or int(cam_choice) > len(camera_streams):
-            print("❌ เลือกกล้องไม่ถูกต้อง")
+            print("เลือกกล้องไม่ถูกต้อง")
             return
 
         cam_name = f"Camera-{cam_choice}"
         stream = camera_streams.get(cam_name)
         frame = camera_frames.get(cam_name)
         if not stream or frame is None:
-            print("❌ ไม่พบกล้องหรือภาพจากกล้อง")
+            print("ไม่พบกล้องหรือภาพจากกล้อง")
             return
 
         firstname = input("ชื่อจริง (Firstname): ").strip()
