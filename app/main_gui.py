@@ -1,12 +1,9 @@
 import sys
 import cv2
 import threading
-import time
 import requests
 import torch
-import base64
-import io
-from datetime import datetime, date
+from datetime import datetime
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
@@ -17,11 +14,13 @@ from PyQt5.QtCore import Qt, QTimer, QDate
 from PyQt5.QtGui import QPixmap, QImage
 from datetime import datetime
 
-from config import LOG_EVENT_URL, FASTAPI_URL, MIN_LOG_INTERVAL
+from config import FASTAPI_URL
 from recognition.face_models import mtcnn, resnet
-from recognition.face_utils import preprocess_face, find_closest_match
+from recognition.face_utils import preprocess_face
 from database.milvus_database import load_face_database
-from streaming.face_detection import process_camera, camera_frames, reload_face_database, send_log_with_image, log_recognition_event
+from streaming.face_detection import (
+    process_camera, camera_frames, reload_face_database, get_ui_events
+)
 
 class AddFaceDialog(QDialog):
     def __init__(self, parent=None, current_frame=None):
@@ -37,7 +36,10 @@ class AddFaceDialog(QDialog):
         
         if self.current_frame is not None:
             frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
-            boxes, _ = mtcnn.detect(frame_rgb)
+            small_prev = cv2.resize(frame_rgb, (0,0), fx=0.6, fy=0.6, interpolation=cv2.INTER_LINEAR)
+            boxes, _ = mtcnn.detect(small_prev)
+            if boxes is not None:
+                boxes = boxes / 0.6
             face_count = len(boxes) if boxes is not None else 0
             
             preview_label = QLabel(f"ภาพตัวอย่าง (พบใบหน้า: {face_count} ใบหน้า):")
@@ -129,7 +131,7 @@ class AddFaceDialog(QDialog):
     
     def load_company_options(self):
         """โหลดรายชื่อบริษัทจาก FastAPI"""
-        self.log_status("🔄 กำลังโหลดรายชื่อบริษัท...")
+        self.log_status("กำลังโหลดรายชื่อบริษัท...")
         try:
             response = requests.get(f"{FASTAPI_URL}/api/company-options/", timeout=5)
             if response.ok:
@@ -137,14 +139,14 @@ class AddFaceDialog(QDialog):
                 companies = data.get("available_options", [])
                 self.company_combo.clear()
                 self.company_combo.addItems(companies)
-                self.log_status(f"✅ โหลดรายชื่อบริษัทสำเร็จ ({len(companies)} บริษัท)")
+                self.log_status(f"โหลดรายชื่อบริษัทสำเร็จ ({len(companies)} บริษัท)")
                 if companies:
-                    self.log_status(f"📋 บริษัทที่มี: {', '.join(companies[:5])}{'...' if len(companies) > 5 else ''}")
+                    self.log_status(f"บริษัทที่มี: {', '.join(companies[:5])}{'...' if len(companies) > 5 else ''}")
             else:
-                self.log_status("⚠️ ไม่สามารถโหลดรายชื่อบริษัทได้")
+                self.log_status("ไม่สามารถโหลดรายชื่อบริษัทได้")
                 self.company_combo.addItems(["Default Company"])
         except Exception as e:
-            self.log_status(f"❌ เกิดข้อผิดพลาดในการโหลดรายชื่อบริษัท: {str(e)}")
+            self.log_status(f" เกิดข้อผิดพลาดในการโหลดรายชื่อบริษัท: {str(e)}")
             self.company_combo.addItems(["Default Company"])
     
     def save_employee(self):
@@ -168,11 +170,11 @@ class AddFaceDialog(QDialog):
         try:
             test_response = requests.get(f"{FASTAPI_URL}/docs", timeout=5)
             if not test_response.ok:
-                self.log_status("❌ ไม่สามารถเชื่อมต่อ FastAPI ได้")
+                self.log_status(" ไม่สามารถเชื่อมต่อ FastAPI ได้")
                 QMessageBox.critical(self, "ข้อผิดพลาด", "ไม่สามารถเชื่อมต่อ FastAPI ได้")
                 return
         except Exception as e:
-            self.log_status(f"❌ ไม่สามารถเชื่อมต่อ FastAPI: {str(e)}")
+            self.log_status(f" ไม่สามารถเชื่อมต่อ FastAPI: {str(e)}")
             QMessageBox.critical(self, "ข้อผิดพลาด", f"ไม่สามารถเชื่อมต่อ FastAPI: {str(e)}")
             return
         
@@ -190,7 +192,7 @@ class AddFaceDialog(QDialog):
             emp_response = requests.post(f"{FASTAPI_URL}/api/resource/Employee", json=employee_payload, timeout=10)
             
             if not emp_response.ok:
-                self.log_status(f"❌ สร้าง Employee ไม่สำเร็จ: {emp_response.status_code} {emp_response.text}")
+                self.log_status(f" สร้าง Employee ไม่สำเร็จ: {emp_response.status_code} {emp_response.text}")
                 QMessageBox.warning(self, "ข้อผิดพลาด", f"สร้าง Employee ไม่สำเร็จ:\n{emp_response.status_code} {emp_response.text}")
                 return
             
@@ -198,7 +200,7 @@ class AddFaceDialog(QDialog):
             employee_id = employee_data.get("employee_id") or employee_data.get("data", {}).get("name")
             
             if not employee_id:
-                self.log_status("❌ ไม่ได้รับ employee_id จาก server")
+                self.log_status(" ไม่ได้รับ employee_id จาก server")
                 QMessageBox.critical(self, "ข้อผิดพลาด", "ไม่ได้รับ employee_id จาก server")
                 return
             
@@ -208,7 +210,7 @@ class AddFaceDialog(QDialog):
             boxes, _ = mtcnn.detect(frame_rgb)
             
             if boxes is None:
-                self.log_status("❌ ไม่พบใบหน้าในภาพ")
+                self.log_status(" ไม่พบใบหน้าในภาพ")
                 QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง")
                 return
             
@@ -216,7 +218,7 @@ class AddFaceDialog(QDialog):
             for box in boxes:
                 face_tensor = preprocess_face(self.current_frame, box)
                 if face_tensor is None:
-                    self.log_status("❌ ไม่สามารถสร้าง face tensor ได้")
+                    self.log_status(" ไม่สามารถสร้าง face tensor ได้")
                     continue
                 
                 with torch.no_grad():
@@ -234,12 +236,12 @@ class AddFaceDialog(QDialog):
                 vector_response = requests.post(f"{FASTAPI_URL}/add_face_vector/", json=vector_payload, timeout=10)
                 
                 if not vector_response.ok:
-                    self.log_status(f"❌ บันทึก embedding ไม่สำเร็จ: {vector_response.status_code} {vector_response.text}")
+                    self.log_status(f"บันทึก embedding ไม่สำเร็จ: {vector_response.status_code} {vector_response.text}")
                     continue
                 
                 face_added = True
-                self.log_status("✅ บันทึกข้อมูล embedding และพนักงานเรียบร้อย")
-                self.log_status(f"✅ Response: {vector_response.json()}")
+                self.log_status("บันทึกข้อมูล embedding และพนักงานเรียบร้อย")
+                self.log_status(f"Response: {vector_response.json()}")
                 
                 break
             
@@ -248,11 +250,11 @@ class AddFaceDialog(QDialog):
                 QMessageBox.information(self, "สำเร็จ", f"เพิ่มพนักงาน {firstname} {lastname} เรียบร้อยแล้ว")
                 self.accept()
             else:
-                self.log_status("❌ ไม่สามารถบันทึกใบหน้าได้")
+                self.log_status("ไม่สามารถบันทึกใบหน้าได้")
                 QMessageBox.warning(self, "ไม่สำเร็จ", "ไม่สามารถบันทึกใบหน้าได้")
                 
         except Exception as e:
-            self.log_status(f"❌ เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
+            self.log_status(f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
             QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
 
 class FaceRecognitionApp(QWidget):
@@ -368,78 +370,27 @@ class FaceRecognitionApp(QWidget):
             dialog = AddFaceDialog(self, current_frame)
             if dialog.exec_() == QDialog.Accepted:
                 self.known_embeddings, self.known_names, self.known_employee_ids = load_face_database()
-                print("✅ รีโหลดฐานข้อมูลใบหน้าเรียบร้อย")
+                print("รีโหลดฐานข้อมูลใบหน้าเรียบร้อย")
         finally:
             self.add_face_btn.setEnabled(True)
             self.add_face_btn.setText("Add Face")
 
     def update_frame(self):
         frame = camera_frames.get(self.video_source_name)
-        if frame is None:
-            return
-
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        q_img = QImage(rgb_frame.data, rgb_frame.shape[1], rgb_frame.shape[0], QImage.Format_RGB888)
-
-        scaled_pixmap = QPixmap.fromImage(q_img).scaled(
-            self.camera_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        self.camera_label.setPixmap(scaled_pixmap)
-
-        self.detect_and_log_faces(frame)
-
-
-    def detect_and_log_faces(self, frame):
-        boxes, _ = mtcnn.detect(frame)
-        if boxes is None:
-            return
-
-        logging_now_set = set()
-
-        for box in boxes:
-            preprocessed = preprocess_face(frame, box)
-            if preprocessed is None:
-                continue
-
-            embedding = resnet(preprocessed).detach().cpu()
-
-            match_employee_id, match_name, match_dist = find_closest_match(
-                embedding,
-                self.known_embeddings,
-                self.known_employee_ids,
-                self.known_names,
+        if frame is not None:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            q_img = QImage(rgb_frame.data, rgb_frame.shape[1], rgb_frame.shape[0], QImage.Format_RGB888)
+            scaled_pixmap = QPixmap.fromImage(q_img).scaled(
+                self.camera_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
+            self.camera_label.setPixmap(scaled_pixmap)
 
-            if match_name and match_name.lower() != "unknown" and match_dist < 0.7:
-                event_type = "in" if datetime.now().hour < 12 else "out"
-                now = time.time()
-                last_time = self.last_log_times.get(match_employee_id, 0)
-                last_state = self.person_states.get(match_employee_id, None)
-
-                if (now - last_time < MIN_LOG_INTERVAL) and (last_state == event_type):
-                    continue
-
-                if match_employee_id in logging_now_set:
-                    continue
-                logging_now_set.add(match_employee_id)
-
-                try:
-                    payload = {"name": match_employee_id, "event": event_type}
-                    res = requests.post(LOG_EVENT_URL, json=payload, timeout=3)
-                    if res.ok:
-                        print(f"✅ Log {match_name} [{event_type}]")
-
-                        self.person_states[match_employee_id] = event_type
-                        self.last_log_times[match_employee_id] = now
-
-                        self.log_face(match_employee_id, match_name, frame)
-
-                    else:
-                        print("❌ Log ล้มเหลว:", res.status_code, res.text)
-
-                except Exception as e:
-                    print(f"❌ Error logging for {match_employee_id}: {e}")
-
+        try:
+            events = get_ui_events(10)
+            for ev in events:
+                self.log_face_from_jpg(ev["employee_id"], ev["name"], ev["image_jpg"], ev["time"])
+        except Exception:
+            pass
 
 
     def log_face(self, employee_id, name, frame):
@@ -492,6 +443,39 @@ class FaceRecognitionApp(QWidget):
 
         self.log_panel.insertWidget(0, container)
 
+
+    def log_face_from_jpg(self, employee_id, name, jpg_bytes, when_text):
+        import numpy as np
+        img_array = np.frombuffer(jpg_bytes, dtype=np.uint8)
+        bgr = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        if bgr is None:
+            return
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb.shape
+        q_img = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(q_img).scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        date_str, time_str = when_text.split(" ")
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(5, 5, 5, 5)
+
+        pic_label = QLabel(); pic_label.setPixmap(pixmap)
+        pic_label.setAlignment(Qt.AlignCenter); pic_label.setStyleSheet("border: 1px solid gray;")
+        employee_id_label = QLabel(employee_id); employee_id_label.setAlignment(Qt.AlignCenter)
+        employee_id_label.setStyleSheet("color: #007ACC; font-weight: bold; font-size: 11pt;")
+        name_label = QLabel(name); name_label.setAlignment(Qt.AlignCenter); name_label.setStyleSheet("font-size: 10pt;")
+        date_label = QLabel(date_str); date_label.setAlignment(Qt.AlignCenter); date_label.setStyleSheet("color: gray; font-size: 10pt;")
+        time_label = QLabel(time_str); time_label.setAlignment(Qt.AlignCenter); time_label.setStyleSheet("color: gray; font-size: 10pt;")
+
+        layout.addWidget(pic_label)
+        layout.addWidget(employee_id_label)
+        layout.addWidget(name_label)
+        layout.addWidget(date_label)
+        layout.addWidget(time_label)
+        container.setStyleSheet("background-color: white; padding: 5px;")
+        self.log_panel.insertWidget(0, container)
 
     def closeEvent(self, event):
         self.timer.stop()
