@@ -638,7 +638,7 @@ def get_available_gender_options():
         return {
             "status": "error",
             "message": str(e),
-            "available_options": ["Male", "Female"]  # fallback options
+            "available_options": ["Male", "Female"]
         }
 
 @app.get("/api/company-options/")
@@ -649,11 +649,11 @@ def get_available_company_options():
         return {
             "status": "success",
             "company_options": company_options,
-            "available_options": company_options if company_options else ["Default Company"]  # fallback options
+            "available_options": company_options if company_options else ["Default Company"]
         }
     except Exception as e:
         return {
             "status": "error",
             "message": str(e),
-            "available_options": ["Default Company"]  # fallback options
+            "available_options": ["Default Company"] 
         }

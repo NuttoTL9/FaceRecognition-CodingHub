@@ -3,6 +3,7 @@ import cv2
 import threading
 import requests
 import torch
+import numpy as np
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
@@ -112,7 +113,7 @@ class AddFaceDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
         
-        info_label = QLabel("💡 หมายเหตุ: ระบบจะใช้ภาพปัจจุบันจากกล้องเพื่อบันทึกใบหน้า\n📋 สามารถเลือกบริษัทที่มีอยู่หรือพิมพ์ชื่อใหม่ได้\n📸 รูปภาพใบหน้าจะถูกส่งไปยัง Employee profile ด้วย")
+        info_label = QLabel("💡 หมายเหตุ: ระบบจะใช้ภาพปัจจุบันจากกล้องเพื่อบันทึกใบหน้า\n📋 สามารถเลือกบริษัทที่มีอยู่หรือพิมพ์ชื่อใหม่ได้")
         info_label.setStyleSheet("color: #666; font-size: 10pt; padding: 5px;")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -204,7 +205,7 @@ class AddFaceDialog(QDialog):
                 QMessageBox.critical(self, "ข้อผิดพลาด", "ไม่ได้รับ employee_id จาก server")
                 return
             
-            self.log_status(f"✅ ได้ employee_id: {employee_id}")
+            self.log_status(f"ได้ employee_id: {employee_id}")
             
             frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
             boxes, _ = mtcnn.detect(frame_rgb)
@@ -445,7 +446,7 @@ class FaceRecognitionApp(QWidget):
 
 
     def log_face_from_jpg(self, employee_id, name, jpg_bytes, when_text):
-        import numpy as np
+
         img_array = np.frombuffer(jpg_bytes, dtype=np.uint8)
         bgr = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         if bgr is None:

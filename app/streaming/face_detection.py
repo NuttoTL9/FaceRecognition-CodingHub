@@ -28,7 +28,6 @@ _trackers = {}
 TRACKER_TTL = 90
 MIN_BOX_SIZE = 8
 
-
 shared_embeddings = torch.empty(0, 512).to(DEVICE)
 shared_names = []
 shared_employee_ids = [] 
