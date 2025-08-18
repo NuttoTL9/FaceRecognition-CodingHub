@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+  namespace: face-recog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: notroot-thinkcentre-m710q
+      containers:
+        - name: fastapi
+          image: bigtime118/fastapi:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: fastapi-secret
