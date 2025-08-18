@@ -1,0 +1,47 @@
+image:
+  all:
+    repository: milvusdb/milvus
+    tag: v2.3.21
+
+cluster:
+  enabled: false
+
+pulsar:
+  enabled: false
+
+etcd:
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 1Gi
+  nodeSelector:
+    kubernetes.io/hostname: notroot-thinkcentre-m710q
+
+minio:
+  enabled: true
+  mode: standalone
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 2Gi
+  nodeSelector:
+    kubernetes.io/hostname: notroot-thinkcentre-m710q
+  provisioning:
+    enabled: true
+    nodeSelector:
+      kubernetes.io/hostname: notroot-thinkcentre-m710q
+standalone:
+  enabled: true
+  nodeSelector:
+    kubernetes.io/hostname: notroot-thinkcentre-m710q
+  service:
+    type: NodePort
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: "local-path"
+    accessMode: ReadWriteOnce
+
+
+persistence:
+  storageClass: "local-path"
