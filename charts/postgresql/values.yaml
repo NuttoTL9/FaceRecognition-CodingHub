@@ -1,0 +1,15 @@
+postgresql:
+  username: postgres
+  database: postgres
+  port: 5432
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""  # ถ้าใช้ default StorageClass ให้เว้นว่าง
+
+service:
+  type: ClusterIP
+
+secret:
+  password: mysecurepassword   # รหัสผ่านเก็บใน Secret แทน
