@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: app-config
+  name: fastapi
   namespace: fast-recog
 data:
   LOG_LEVEL: "debug"
