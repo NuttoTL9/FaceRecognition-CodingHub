@@ -9,14 +9,15 @@ from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
     QScrollArea, QPushButton, QLineEdit, QSizePolicy, QDialog,
-    QFormLayout, QDateEdit, QComboBox, QMessageBox, QTextEdit
+    QFormLayout, QDateEdit, QComboBox, QMessageBox, QTextEdit,
+    QGridLayout
 )
 
 from PyQt5.QtCore import Qt, QTimer, QDate
 from PyQt5.QtGui import QPixmap, QImage
 from datetime import datetime
 
-from config import FASTAPI_URL
+from config import FASTAPI_URL, RTSP_URLS
 from recognition.face_models import mtcnn, resnet
 from recognition.face_utils import preprocess_face
 from database.milvus_database import load_face_database, add_embedding_to_milvus, search_face
@@ -598,7 +599,10 @@ class FaceRecognitionApp(QWidget):
         self.setWindowTitle("Face Recognition with Real-time Log")
         self.setGeometry(100, 100, 1200, 600)
 
-        self.video_source_name = "MainCam"
+        # Multi-camera support
+        self.multi_camera = len(RTSP_URLS) > 1
+        self.camera_names = [f"Camera-{i+1}" for i in range(len(RTSP_URLS))] if self.multi_camera else ["MainCam"]
+        self.video_source_name = self.camera_names[0]
         self.last_logged_names = []
         self.last_log_times = {}
         self.person_states = {}
@@ -634,7 +638,7 @@ class FaceRecognitionApp(QWidget):
         self.add_face_btn = QPushButton("Add Face")
         self.add_face_btn.clicked.connect(self.show_add_face_dialog)
 
-        # --------------------- ปุ่มใหม่ --------------------- #
+
         self.add_image_existing_btn = QPushButton("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
         self.add_image_existing_btn.clicked.connect(self.show_add_image_existing_dialog)
         self.add_image_existing_btn.setStyleSheet("""
@@ -672,22 +676,52 @@ class FaceRecognitionApp(QWidget):
             }
         """)
 
-        self.camera_label = QLabel(self)
-        self.camera_label.setAlignment(Qt.AlignCenter)
-        self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setStyleSheet("background-color: #ddd;")
-        self.camera_label.resizeEvent = lambda event: self.update_frame()
+        # Camera display area - dynamic grid for N cameras
+        self.camera_container = QWidget()
+        self.camera_layout = QGridLayout(self.camera_container)
+        self.camera_layout.setContentsMargins(0, 0, 0, 0)
+        self.camera_layout.setSpacing(6)
+        self.camera_labels = []
+
+        def _compute_grid(n):
+            if n <= 0:
+                return 0, 0
+            import math
+            cols = math.ceil(math.sqrt(n))
+            rows = math.ceil(n / cols)
+            return rows, cols
+
+        rows, cols = _compute_grid(len(self.camera_names))
+        if rows == 0:
+            rows, cols = 1, 1
+        idx = 0
+        for r in range(rows):
+            for c in range(cols):
+                if idx >= len(self.camera_names):
+                    break
+                lbl = QLabel(self)
+                lbl.setAlignment(Qt.AlignCenter)
+                lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                lbl.setStyleSheet("background-color: #ddd;")
+                self.camera_layout.addWidget(lbl, r, c)
+                self.camera_labels.append(lbl)
+                idx += 1
+        if len(self.camera_labels) == 1:
+            # Ensure single camera resizes triggers update
+            self.camera_labels[0].resizeEvent = lambda event: self.update_frame()
 
         camera_control_layout = QVBoxLayout()
         camera_control_layout.setContentsMargins(0, 0, 0, 0)
         camera_control_layout.setSpacing(5)
-        camera_control_layout.addWidget(self.input_rtsp)
-        camera_control_layout.addWidget(self.connect_btn)
+        # Hide manual connect controls in multi-camera mode from .env
+        if not self.multi_camera:
+            camera_control_layout.addWidget(self.input_rtsp)
+            camera_control_layout.addWidget(self.connect_btn)
         camera_control_layout.addWidget(self.add_face_btn)
-        # ---- เพิ่มปุ่มใหม่เข้า layout ---- #
+
         camera_control_layout.addWidget(self.add_image_existing_btn)
-        # ----------------------------------- #
-        camera_control_layout.addWidget(self.camera_label)
+
+        camera_control_layout.addWidget(self.camera_container)
 
         camera_widget = QWidget()
         camera_widget.setLayout(camera_control_layout)
@@ -701,8 +735,12 @@ class FaceRecognitionApp(QWidget):
         self.setLayout(main_layout)
 
     def start_video(self):
-        self.video_source = 0
-        threading.Thread(target=process_camera, args=(self.video_source, self.video_source_name), daemon=True).start()
+        if self.multi_camera:
+            for idx, src in enumerate(RTSP_URLS[:len(self.camera_names)]):
+                threading.Thread(target=process_camera, args=(src, self.camera_names[idx]), daemon=True).start()
+        else:
+            self.video_source = 0
+            threading.Thread(target=process_camera, args=(self.video_source, self.video_source_name), daemon=True).start()
         self.timer.start(30)
 
     def change_camera(self):
@@ -749,14 +787,30 @@ class FaceRecognitionApp(QWidget):
             print("รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่ม embedding ให้พนักงานที่มีอยู่แล้วเรียบร้อย")
 
     def update_frame(self):
-        frame = camera_frames.get(self.video_source_name)
-        if frame is not None:
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            q_img = QImage(rgb_frame.data, rgb_frame.shape[1], rgb_frame.shape[0], QImage.Format_RGB888)
-            scaled_pixmap = QPixmap.fromImage(q_img).scaled(
-                self.camera_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.camera_label.setPixmap(scaled_pixmap)
+        if self.multi_camera:
+            names = self.camera_names
+            labels = self.camera_labels
+            for i in range(len(labels)):
+                if i >= len(names):
+                    break
+                frame = camera_frames.get(names[i])
+                if frame is None:
+                    continue
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                q_img = QImage(rgb_frame.data, rgb_frame.shape[1], rgb_frame.shape[0], QImage.Format_RGB888)
+                scaled_pixmap = QPixmap.fromImage(q_img).scaled(
+                    labels[i].size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                labels[i].setPixmap(scaled_pixmap)
+        else:
+            frame = camera_frames.get(self.video_source_name)
+            if frame is not None:
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                q_img = QImage(rgb_frame.data, rgb_frame.shape[1], rgb_frame.shape[0], QImage.Format_RGB888)
+                scaled_pixmap = QPixmap.fromImage(q_img).scaled(
+                    self.camera_labels[0].size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                self.camera_labels[0].setPixmap(scaled_pixmap)
 
         try:
             events = get_ui_events(10)

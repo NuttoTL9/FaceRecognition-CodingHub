@@ -11,7 +11,20 @@ DEVICE = torch.device("cuda:0" if os.getenv("DEVICE") == "cuda" and torch.cuda.i
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
 
 RTSP_RAW = os.getenv("RTSP_URLS", "0")
-RTSP_URLS = [int(RTSP_RAW)] if RTSP_RAW.isdigit() else RTSP_RAW.split(",")
+
+def _parse_rtsp_urls(raw):
+	parts = [p.strip() for p in raw.split(",") if p.strip() != ""]
+	urls = []
+	for p in parts:
+		if (p.startswith('"') and p.endswith('"')) or (p.startswith("'") and p.endswith("'")):
+			p = p[1:-1].strip()
+		if p.isdigit():
+			urls.append(int(p))
+		else:
+			urls.append(p)
+	return urls
+
+RTSP_URLS = _parse_rtsp_urls(RTSP_RAW)
 
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "face_vectors")
 MIN_LOG_INTERVAL = int(os.getenv("MIN_LOG_INTERVAL", "60"))
