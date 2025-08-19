@@ -1,27 +1,18 @@
-
 FROM python:3.12-slim
-
 
 RUN apt-get update && apt-get install -y gcc libpq-dev iputils-ping && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-
-
 ENV TORCH_HOME=/root/.cache/torch
 COPY inception_resnet_v1_vggface2.pt /root/.cache/torch/checkpoints/
 
-
-
-COPY ./requirements.txt /code/requirements.txt
+COPY requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
-
-
 
 ENV PATH="/root/.local/bin:$PATH"
 
+# copy เฉพาะโค้ด FastAPI
+COPY app/FastAPI /app
 
-COPY ./app /app/app
-
-
-CMD ["uvicorn", "app.FastAPI.main_fastapi:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "main_fastapi:app", "--host", "0.0.0.0", "--port", "80"]
