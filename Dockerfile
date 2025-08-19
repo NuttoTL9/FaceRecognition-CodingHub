@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y gcc libpq-dev iputils-ping && rm -rf /v
 
 WORKDIR /app
 
+
+
 ENV TORCH_HOME=/root/.cache/torch
 COPY inception_resnet_v1_vggface2.pt /root/.cache/torch/checkpoints/
 
