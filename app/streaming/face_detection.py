@@ -111,7 +111,20 @@ def _create_tracker():
 def reload_face_database():
     global shared_embeddings, shared_names, shared_employee_ids
     embeddings, names, employee_ids = load_face_database()
-    print("Loaded employee_ids and names from Milvus:", [f"{eid}:{name}" for eid, name in zip(employee_ids, names)])
+    
+    # แสดงเฉพาะพนักงานที่ไม่ซ้ำพร้อมจำนวน embedding
+    from collections import Counter
+    employee_counts = Counter(employee_ids)
+    unique_employees = {}
+    for i, (eid, name) in enumerate(zip(employee_ids, names)):
+        if eid not in unique_employees:
+            unique_employees[eid] = name
+    
+    print("Loaded unique employees from Milvus:")
+    for eid, name in unique_employees.items():
+        count = employee_counts[eid]
+        print(f"   - {eid}: {name} ({count} embeddings)")
+    
     with embedding_lock:
         shared_employee_ids = employee_ids
         shared_names = names

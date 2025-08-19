@@ -309,7 +309,7 @@ async def log_event(data: LogData, _=Depends(get_milvus_connection)):
 @app.get("/list_employees/")
 def list_employees(_=Depends(get_milvus_connection)):
     """
-    ดึงรายชื่อ employee_id + name จาก Milvus
+    ดึงรายชื่อ employee_id + name จาก Milvus พร้อมจำนวน embedding
     """
     try:
         collection = get_or_create_collection()
@@ -323,21 +323,39 @@ def list_employees(_=Depends(get_milvus_connection)):
         )
         print("📋 Milvus raw result:", results)
 
-        employees = {}
+        # นับจำนวน embedding ต่อ employee_id
+        employee_counts = {}
+        employee_names = {}
+        
         for r in results:
             emp_id = r["employee_id"]
-            if emp_id not in employees:
-                employees[emp_id] = r["name"]
+            name = r["name"]
+            
+            if emp_id not in employee_counts:
+                employee_counts[emp_id] = 0
+                employee_names[emp_id] = name
+            
+            employee_counts[emp_id] += 1
 
-        employee_list = [{"employee_id": k, "name": v} for k, v in employees.items()]
-        print(f"✅ Found {len(employee_list)} employees in Milvus")
+        # สร้างรายการพนักงานพร้อมจำนวน embedding
+        employee_list = []
+        for emp_id, count in employee_counts.items():
+            employee_list.append({
+                "employee_id": emp_id, 
+                "name": employee_names[emp_id],
+                "embedding_count": count
+            })
+
+        print(f"✅ Found {len(employee_list)} unique employees in Milvus")
+        for emp in employee_list:
+            print(f"   - {emp['employee_id']}: {emp['name']} ({emp['embedding_count']} embeddings)")
 
         return {"status": "success", "employees": employee_list}
 
     except Exception as e:
         import traceback
         print("❌ Failed to list employees:", e)
-        print(traceback.format_exc())   # <<< เพิ่มบรรทัดนี้เพื่อดู stack trace
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Failed to list employees")
 
 @app.post("/add_face_to_existing/")

@@ -112,7 +112,6 @@ def test_update_ffmpeg_reads_frame(_, mock_popen):
 @patch('cv2.VideoCapture')
 @patch('shutil.which', return_value='C:\\ffmpeg\\bin\\ffmpeg.exe')
 def test_stop_releases_resources(_, mock_video_capture, mock_popen):
-    # Test ffmpeg stop
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
@@ -122,7 +121,6 @@ def test_stop_releases_resources(_, mock_video_capture, mock_popen):
     mock_proc.terminate.assert_called_once()
     mock_proc.wait.assert_called_once()
 
-    # Test opencv stop
     mock_cap = MagicMock()
     mock_cap.isOpened.return_value = True
     mock_video_capture.return_value = mock_cap

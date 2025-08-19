@@ -18,7 +18,7 @@ from datetime import datetime
 from config import FASTAPI_URL
 from recognition.face_models import mtcnn, resnet
 from recognition.face_utils import preprocess_face
-from database.milvus_database import load_face_database
+from database.milvus_database import load_face_database, add_embedding_to_milvus, search_face
 from streaming.face_detection import (
     process_camera, camera_frames, reload_face_database, get_ui_events
 )
@@ -251,6 +251,7 @@ class AddFaceDialog(QDialog):
                 reload_face_database()
                 QMessageBox.information(self, "สำเร็จ", f"เพิ่มพนักงาน {firstname} {lastname} เรียบร้อยแล้ว")
                 self.accept()
+                reload_face_database()
             else:
                 self.log_status("ไม่สามารถบันทึกใบหน้าได้")
                 QMessageBox.warning(self, "ไม่สำเร็จ", "ไม่สามารถบันทึกใบหน้าได้")
@@ -266,28 +267,119 @@ class AddImageToExistingDialog(QDialog):
         self.current_frame = current_frame
         self.setWindowTitle("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
         self.setModal(True)
-        self.setFixedSize(400, 250)
+        self.setFixedSize(500, 400)
+        self.recording = False
+        self.recorded_embeddings = []
+        self.countdown_timer = QTimer()
+        self.countdown_timer.timeout.connect(self.update_countdown)
+        self.countdown_seconds = 5
         self.init_ui()
         self.load_employee_list()
 
     def init_ui(self):
         layout = QVBoxLayout()
+        
+        # Employee selection
         form_layout = QFormLayout()
         self.employee_combo = QComboBox()
         form_layout.addRow("เลือกพนักงาน:", self.employee_combo)
         layout.addLayout(form_layout)
 
+        # Recording controls
+        recording_layout = QHBoxLayout()
+        self.record_button = QPushButton("เริ่มบันทึก (5 วินาที)")
+        self.record_button.clicked.connect(self.start_recording)
+        self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        
+        self.countdown_label = QLabel("พร้อมบันทึก")
+        self.countdown_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #333;
+                padding: 10px;
+                border: 2px solid #ddd;
+                border-radius: 5px;
+                background-color: #f9f9f9;
+            }
+        """)
+        self.countdown_label.setAlignment(Qt.AlignCenter)
+        
+        recording_layout.addWidget(self.record_button)
+        recording_layout.addWidget(self.countdown_label)
+        layout.addLayout(recording_layout)
+
+        # Progress and status
+        self.progress_label = QLabel("สถานะ: รอเริ่มบันทึก")
+        self.progress_label.setStyleSheet("font-size: 12px; color: #666;")
+        layout.addWidget(self.progress_label)
+
+        # Recorded embeddings count
+        self.embeddings_count_label = QLabel("จำนวน embedding ที่บันทึก: 0")
+        self.embeddings_count_label.setStyleSheet("font-size: 12px; color: #007ACC; font-weight: bold;")
+        layout.addWidget(self.embeddings_count_label)
+
+        # Buttons
         button_layout = QHBoxLayout()
-        self.save_button = QPushButton("บันทึก")
-        self.save_button.clicked.connect(self.save_image)
+        self.save_button = QPushButton("บันทึกทั้งหมด")
+        self.save_button.clicked.connect(self.save_all_embeddings)
+        self.save_button.setEnabled(False)
+        self.save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        
         self.cancel_button = QPushButton("ยกเลิก")
         self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+        """)
+        
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
 
+        # Status text
         self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(100)
+        self.status_text.setMaximumHeight(120)
         self.status_text.setReadOnly(True)
         layout.addWidget(self.status_text)
 
@@ -300,65 +392,198 @@ class AddImageToExistingDialog(QDialog):
         """โหลดรายชื่อจาก FastAPI"""
         try:
             self.log_status("กำลังโหลดรายชื่อพนักงาน...")
-            # เรียก endpoint /list_employees/ แทน
             response = requests.get(f"{FASTAPI_URL}/list_employees/", timeout=30)
             if response.ok:
                 data = response.json()
                 employees = data.get("employees", [])
                 self.employee_combo.clear()
                 for emp in employees:
-                    self.employee_combo.addItem(
-                        f"{emp['employee_id']} - {emp['name']}", emp["employee_id"]
-                    )
+                    display_text = f"{emp['employee_id']} - {emp['name']} ({emp.get('embedding_count', 0)} embeddings)"
+                    self.employee_combo.addItem(display_text, emp["employee_id"])
                 self.log_status(f"โหลดสำเร็จ ({len(employees)} คน)")
             else:
                 self.log_status(f"โหลดรายชื่อไม่สำเร็จ: {response.status_code}")
         except Exception as e:
             self.log_status(f"เกิดข้อผิดพลาด: {str(e)}")
 
-
-    def save_image(self):
+    def start_recording(self):
+        """เริ่มการบันทึก embedding"""
+        if self.recording:
+            return
+            
         employee_id = self.employee_combo.currentData()
         if not employee_id:
             QMessageBox.warning(self, "ข้อมูลไม่ครบ", "กรุณาเลือกพนักงาน")
             return
 
-        if self.current_frame is None:
-            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง")
-            return
+        self.recording = True
+        self.recorded_embeddings = []
+        self.countdown_seconds = 5
+        self.record_button.setEnabled(False)
+        self.record_button.setText("กำลังบันทึก...")
+        self.countdown_label.setText(f"เริ่มใน {self.countdown_seconds} วินาที")
+        self.countdown_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+                padding: 10px;
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                background-color: #4CAF50;
+            }
+        """)
+        self.progress_label.setText("สถานะ: เริ่มบันทึกใน 5 วินาที")
+        self.log_status("เริ่มการบันทึก embedding...")
+        
+        # เริ่มนับถอยหลัง
+        self.countdown_timer.start(1000)  # 1 วินาที
 
+    def update_countdown(self):
+        """อัพเดตนับถอยหลัง"""
+        self.countdown_seconds -= 1
+        
+        if self.countdown_seconds > 0:
+            self.countdown_label.setText(f"เริ่มใน {self.countdown_seconds} วินาที")
+            self.progress_label.setText(f"สถานะ: เริ่มบันทึกใน {self.countdown_seconds} วินาที")
+        else:
+            self.countdown_timer.stop()
+            self.countdown_label.setText("กำลังบันทึก...")
+            self.countdown_label.setStyleSheet("""
+                QLabel {
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: white;
+                    padding: 10px;
+                    border: 2px solid #f44336;
+                    border-radius: 5px;
+                    background-color: #f44336;
+                }
+            """)
+            self.progress_label.setText("สถานะ: กำลังบันทึก embedding...")
+            self.log_status("เริ่มบันทึก embedding แล้ว! กรุณาหมุนใบหน้าให้ครบทุกมุม")
+            
+            # เริ่มบันทึก embedding ทุก 0.5 วินาที เป็นเวลา 5 วินาที
+            self.recording_timer = QTimer()
+            self.recording_timer.timeout.connect(self.capture_embedding)
+            self.recording_timer.start(500)  # 0.5 วินาที
+            
+            # หยุดการบันทึกหลังจาก 5 วินาที
+            self.stop_timer = QTimer()
+            self.stop_timer.timeout.connect(self.stop_recording)
+            self.stop_timer.start(5000)  # 5 วินาที
+
+    def capture_embedding(self):
+        """บันทึก embedding จากกล้อง"""
+        if not self.recording:
+            return
+            
         try:
-            frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            current_frame = camera_frames.get("MainCam")
+            if current_frame is None:
+                self.log_status("ไม่พบภาพจากกล้อง")
+                return
+
+            frame_rgb = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
             boxes, _ = mtcnn.detect(frame_rgb)
             if boxes is None or len(boxes) == 0:
-                QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง")
+                self.log_status("ไม่พบใบหน้าในภาพ")
                 return
 
-            # ใช้ใบหน้าแรก
             box = boxes[0]
-            face_tensor = preprocess_face(self.current_frame, box)
+            face_tensor = preprocess_face(current_frame, box)
             if face_tensor is None:
-                self.log_status(" ไม่สามารถสร้าง face tensor ได้")
+                self.log_status("ไม่สามารถสร้าง face tensor ได้")
                 return
 
-            _, img_encoded = cv2.imencode(".jpg", self.current_frame)
-            files = {"file": ("face.jpg", img_encoded.tobytes(), "image/jpeg")}
-            data = {"employee_id": employee_id}
+            # ใช้ resnet model เพื่อแปลง face tensor เป็น embedding
+            with torch.no_grad():
+                embedding = resnet(face_tensor).squeeze().cpu().tolist()
 
-            self.log_status("ส่งคำขอเพิ่มรูปไปยัง FastAPI...")
-            response = requests.post(f"{FASTAPI_URL}/add_face_to_existing/", data=data, files=files, timeout=10)
+            if len(embedding) != 512:
+                self.log_status(f"Embedding dimension ไม่ถูกต้อง: {len(embedding)}")
+                return
 
-            if response.ok:
-                self.log_status("เพิ่มรูปให้พนักงานสำเร็จ")
-                QMessageBox.information(self, "สำเร็จ", f"เพิ่มรูปให้ Employee {employee_id} เรียบร้อยแล้ว")
+            self.recorded_embeddings.append(embedding)
+            self.embeddings_count_label.setText(f"จำนวน embedding ที่บันทึก: {len(self.recorded_embeddings)}")
+            self.log_status(f"บันทึก embedding #{len(self.recorded_embeddings)} สำเร็จ")
+
+        except Exception as e:
+            self.log_status(f"เกิดข้อผิดพลาดในการบันทึก: {str(e)}")
+
+    def stop_recording(self):
+        """หยุดการบันทึก"""
+        self.recording = False
+        if hasattr(self, 'recording_timer'):
+            self.recording_timer.stop()
+        if hasattr(self, 'stop_timer'):
+            self.stop_timer.stop()
+        
+        self.record_button.setEnabled(True)
+        self.record_button.setText("เริ่มบันทึก (5 วินาที)")
+        self.countdown_label.setText("บันทึกเสร็จสิ้น")
+        self.countdown_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+                padding: 10px;
+                border: 2px solid #2196F3;
+                border-radius: 5px;
+                background-color: #2196F3;
+            }
+        """)
+        self.progress_label.setText(f"สถานะ: บันทึกเสร็จสิ้น ({len(self.recorded_embeddings)} embedding)")
+        
+        if len(self.recorded_embeddings) > 0:
+            self.save_button.setEnabled(True)
+            self.log_status(f"บันทึกเสร็จสิ้น! ได้ {len(self.recorded_embeddings)} embedding")
+        else:
+            self.log_status("ไม่สามารถบันทึก embedding ได้ กรุณาลองใหม่อีกครั้ง")
+
+    def save_all_embeddings(self):
+        """บันทึก embedding ทั้งหมดเข้า Milvus"""
+        if len(self.recorded_embeddings) == 0:
+            QMessageBox.warning(self, "ไม่มีข้อมูล", "ไม่มี embedding ที่จะบันทึก")
+            return
+
+        employee_id = self.employee_combo.currentData()
+        employee_name = self.employee_combo.currentText().split(" - ")[1].split(" (")[0] if " - " in self.employee_combo.currentText() else "Unknown"
+
+        try:
+            self.log_status(f"กำลังบันทึก {len(self.recorded_embeddings)} embedding ให้ {employee_id}...")
+            
+            success_count = 0
+            for i, embedding in enumerate(self.recorded_embeddings):
+                try:
+                    add_embedding_to_milvus(employee_id, employee_name, embedding)
+                    success_count += 1
+                    self.log_status(f"บันทึก embedding #{i+1} สำเร็จ")
+                except Exception as e:
+                    self.log_status(f"บันทึก embedding #{i+1} ล้มเหลว: {str(e)}")
+
+            if success_count > 0:
+                self.log_status(f"บันทึกสำเร็จ {success_count}/{len(self.recorded_embeddings)} embedding")
+                
+                # อัพเดตรายการพนักงานหลังจากบันทึกเสร็จ
+                self.load_employee_list()
+                
+                QMessageBox.information(self, "สำเร็จ", f"บันทึก {success_count} embedding ให้ Employee {employee_id} เรียบร้อยแล้ว\nตอนนี้ {employee_id} มี embedding ทั้งหมด {success_count} ตัว")
                 self.accept()
             else:
-                self.log_status(f"เพิ่มรูปไม่สำเร็จ: {response.status_code} {response.text}")
-                QMessageBox.warning(self, "ข้อผิดพลาด", f"ไม่สามารถเพิ่มรูปได้:\n{response.text}")
+                QMessageBox.critical(self, "ข้อผิดพลาด", "ไม่สามารถบันทึก embedding ได้")
 
         except Exception as e:
             self.log_status(f"เกิดข้อผิดพลาด: {str(e)}")
             QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาด: {str(e)}")
+
+    def closeEvent(self, event):
+        """หยุด timer เมื่อปิด dialog"""
+        if self.recording:
+            self.stop_recording()
+        self.countdown_timer.stop()
+        super().closeEvent(event)
+
 
 
 class FaceRecognitionApp(QWidget):
