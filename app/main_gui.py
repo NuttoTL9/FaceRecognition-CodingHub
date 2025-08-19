@@ -23,6 +23,7 @@ from streaming.face_detection import (
     process_camera, camera_frames, reload_face_database, get_ui_events
 )
 
+
 class AddFaceDialog(QDialog):
     def __init__(self, parent=None, current_frame=None):
         super().__init__(parent)
@@ -258,6 +259,108 @@ class AddFaceDialog(QDialog):
             self.log_status(f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
             QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
 
+
+class AddImageToExistingDialog(QDialog):
+    def __init__(self, parent=None, current_frame=None):
+        super().__init__(parent)
+        self.current_frame = current_frame
+        self.setWindowTitle("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
+        self.setModal(True)
+        self.setFixedSize(400, 250)
+        self.init_ui()
+        self.load_employee_list()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+        form_layout = QFormLayout()
+        self.employee_combo = QComboBox()
+        form_layout.addRow("เลือกพนักงาน:", self.employee_combo)
+        layout.addLayout(form_layout)
+
+        button_layout = QHBoxLayout()
+        self.save_button = QPushButton("บันทึก")
+        self.save_button.clicked.connect(self.save_image)
+        self.cancel_button = QPushButton("ยกเลิก")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        self.status_text = QTextEdit()
+        self.status_text.setMaximumHeight(100)
+        self.status_text.setReadOnly(True)
+        layout.addWidget(self.status_text)
+
+        self.setLayout(layout)
+
+    def log_status(self, message):
+        self.status_text.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
+
+    def load_employee_list(self):
+        """โหลดรายชื่อจาก FastAPI"""
+        try:
+            self.log_status("กำลังโหลดรายชื่อพนักงาน...")
+            # เรียก endpoint /list_employees/ แทน
+            response = requests.get(f"{FASTAPI_URL}/list_employees/", timeout=30)
+            if response.ok:
+                data = response.json()
+                employees = data.get("employees", [])
+                self.employee_combo.clear()
+                for emp in employees:
+                    self.employee_combo.addItem(
+                        f"{emp['employee_id']} - {emp['name']}", emp["employee_id"]
+                    )
+                self.log_status(f"โหลดสำเร็จ ({len(employees)} คน)")
+            else:
+                self.log_status(f"โหลดรายชื่อไม่สำเร็จ: {response.status_code}")
+        except Exception as e:
+            self.log_status(f"เกิดข้อผิดพลาด: {str(e)}")
+
+
+    def save_image(self):
+        employee_id = self.employee_combo.currentData()
+        if not employee_id:
+            QMessageBox.warning(self, "ข้อมูลไม่ครบ", "กรุณาเลือกพนักงาน")
+            return
+
+        if self.current_frame is None:
+            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง")
+            return
+
+        try:
+            frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            boxes, _ = mtcnn.detect(frame_rgb)
+            if boxes is None or len(boxes) == 0:
+                QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง")
+                return
+
+            # ใช้ใบหน้าแรก
+            box = boxes[0]
+            face_tensor = preprocess_face(self.current_frame, box)
+            if face_tensor is None:
+                self.log_status(" ไม่สามารถสร้าง face tensor ได้")
+                return
+
+            _, img_encoded = cv2.imencode(".jpg", self.current_frame)
+            files = {"file": ("face.jpg", img_encoded.tobytes(), "image/jpeg")}
+            data = {"employee_id": employee_id}
+
+            self.log_status("ส่งคำขอเพิ่มรูปไปยัง FastAPI...")
+            response = requests.post(f"{FASTAPI_URL}/add_face_to_existing/", data=data, files=files, timeout=10)
+
+            if response.ok:
+                self.log_status("เพิ่มรูปให้พนักงานสำเร็จ")
+                QMessageBox.information(self, "สำเร็จ", f"เพิ่มรูปให้ Employee {employee_id} เรียบร้อยแล้ว")
+                self.accept()
+            else:
+                self.log_status(f"เพิ่มรูปไม่สำเร็จ: {response.status_code} {response.text}")
+                QMessageBox.warning(self, "ข้อผิดพลาด", f"ไม่สามารถเพิ่มรูปได้:\n{response.text}")
+
+        except Exception as e:
+            self.log_status(f"เกิดข้อผิดพลาด: {str(e)}")
+            QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาด: {str(e)}")
+
+
 class FaceRecognitionApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -299,6 +402,28 @@ class FaceRecognitionApp(QWidget):
 
         self.add_face_btn = QPushButton("Add Face")
         self.add_face_btn.clicked.connect(self.show_add_face_dialog)
+
+        # --------------------- ปุ่มใหม่ --------------------- #
+        self.add_image_existing_btn = QPushButton("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
+        self.add_image_existing_btn.clicked.connect(self.show_add_image_existing_dialog)
+        self.add_image_existing_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """)
+        # ---------------------------------------------------- #
+
         self.add_face_btn.setStyleSheet("""
             QPushButton {
                 background-color: #4CAF50;
@@ -319,7 +444,7 @@ class FaceRecognitionApp(QWidget):
         self.camera_label = QLabel(self)
         self.camera_label.setAlignment(Qt.AlignCenter)
         self.camera_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.camera_label.setStyleSheet("background-color: #ddd;")  # สีพื้นหลังเวลาไม่มีภาพ
+        self.camera_label.setStyleSheet("background-color: #ddd;")
         self.camera_label.resizeEvent = lambda event: self.update_frame()
 
         camera_control_layout = QVBoxLayout()
@@ -328,6 +453,9 @@ class FaceRecognitionApp(QWidget):
         camera_control_layout.addWidget(self.input_rtsp)
         camera_control_layout.addWidget(self.connect_btn)
         camera_control_layout.addWidget(self.add_face_btn)
+        # ---- เพิ่มปุ่มใหม่เข้า layout ---- #
+        camera_control_layout.addWidget(self.add_image_existing_btn)
+        # ----------------------------------- #
         camera_control_layout.addWidget(self.camera_label)
 
         camera_widget = QWidget()
@@ -375,6 +503,15 @@ class FaceRecognitionApp(QWidget):
         finally:
             self.add_face_btn.setEnabled(True)
             self.add_face_btn.setText("Add Face")
+
+    def show_add_image_existing_dialog(self):
+        current_frame = camera_frames.get(self.video_source_name)
+        if current_frame is None:
+            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง กรุณาตรวจสอบการเชื่อมต่อกล้อง")
+            return
+
+        dialog = AddImageToExistingDialog(self, current_frame)
+        dialog.exec_()
 
     def update_frame(self):
         frame = camera_frames.get(self.video_source_name)

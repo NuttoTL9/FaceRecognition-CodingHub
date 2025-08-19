@@ -306,6 +306,96 @@ async def log_event(data: LogData, _=Depends(get_milvus_connection)):
         print("❌ Log failed:", e)
         raise HTTPException(status_code=500, detail="Log insert failed")
 
+@app.get("/list_employees/")
+def list_employees(_=Depends(get_milvus_connection)):
+    """
+    ดึงรายชื่อ employee_id + name จาก Milvus
+    """
+    try:
+        collection = get_or_create_collection()
+        collection.load()
+
+        print("📡 กำลัง query Milvus ...")
+        results = collection.query(
+            expr="",  
+            output_fields=["employee_id", "name"],
+            limit=1000
+        )
+        print("📋 Milvus raw result:", results)
+
+        employees = {}
+        for r in results:
+            emp_id = r["employee_id"]
+            if emp_id not in employees:
+                employees[emp_id] = r["name"]
+
+        employee_list = [{"employee_id": k, "name": v} for k, v in employees.items()]
+        print(f"✅ Found {len(employee_list)} employees in Milvus")
+
+        return {"status": "success", "employees": employee_list}
+
+    except Exception as e:
+        import traceback
+        print("❌ Failed to list employees:", e)
+        print(traceback.format_exc())   # <<< เพิ่มบรรทัดนี้เพื่อดู stack trace
+        raise HTTPException(status_code=500, detail="Failed to list employees")
+
+@app.post("/add_face_to_existing/")
+async def add_face_to_existing(
+    employee_id: str = Form(...),
+    file: UploadFile = File(...),
+    _=Depends(get_milvus_connection)
+):
+    """
+    เพิ่ม embedding ใหม่เข้าไปใน employee ที่มีอยู่แล้ว โดยไม่สร้าง employee ใหม่
+    """
+    try:
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Empty file content")
+
+        img = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        face = mtcnn(img)
+        if face is None:
+            raise HTTPException(status_code=400, detail="No face detected in image")
+
+        face = face.to(device)
+        with torch.no_grad():
+            embedding = resnet(face.unsqueeze(0)).squeeze().cpu().tolist()
+
+        if len(embedding) != 512:
+            raise HTTPException(status_code=500, detail="Invalid embedding length")
+
+        collection = get_or_create_collection()
+        collection.load()
+
+        # ดึงชื่อจริงจาก employee_id ที่มีอยู่แล้ว
+        expr = f'employee_id == "{employee_id}"'
+        result = collection.query(expr=expr, output_fields=["employee_id", "name"])
+        if not result:
+            raise HTTPException(status_code=404, detail="Employee not found in Milvus")
+
+        name = result[0]["name"]
+
+        # เพิ่ม embedding เข้าไป (ไม่สร้าง employee_id ใหม่)
+        collection.insert(
+            [
+                [employee_id],
+                [name],
+                [embedding]
+            ],
+            fields=["employee_id", "name", "embedding"]
+        )
+        collection.flush()
+
+        return {"status": "success", "employee_id": employee_id, "name": name}
+
+    except Exception as e:
+        print("❌ Failed to add face to existing employee:", e)
+        raise HTTPException(status_code=500, detail="Failed to add face to existing employee")
+
+
 
 @app.post("/log_event_with_snap/")
 async def log_event_with_snap(
