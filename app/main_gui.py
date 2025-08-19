@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QPushButton, QLineEdit, QSizePolicy, QDialog,
     QFormLayout, QDateEdit, QComboBox, QMessageBox, QTextEdit
 )
+
 from PyQt5.QtCore import Qt, QTimer, QDate
 from PyQt5.QtGui import QPixmap, QImage
 from datetime import datetime
@@ -251,7 +252,6 @@ class AddFaceDialog(QDialog):
                 reload_face_database()
                 QMessageBox.information(self, "สำเร็จ", f"เพิ่มพนักงาน {firstname} {lastname} เรียบร้อยแล้ว")
                 self.accept()
-                reload_face_database()
             else:
                 self.log_status("ไม่สามารถบันทึกใบหน้าได้")
                 QMessageBox.warning(self, "ไม่สำเร็จ", "ไม่สามารถบันทึกใบหน้าได้")
@@ -568,7 +568,13 @@ class AddImageToExistingDialog(QDialog):
                 # อัพเดตรายการพนักงานหลังจากบันทึกเสร็จ
                 self.load_employee_list()
                 
-                QMessageBox.information(self, "สำเร็จ", f"บันทึก {success_count} embedding ให้ Employee {employee_id} เรียบร้อยแล้ว\nตอนนี้ {employee_id} มี embedding ทั้งหมด {success_count} ตัว")
+                # รีโหลดฐานข้อมูลใบหน้า
+                self.log_status("กำลังรีโหลดฐานข้อมูลใบหน้า...")
+                from streaming.face_detection import reload_face_database
+                reload_face_database()
+                self.log_status("รีโหลดฐานข้อมูลใบหน้าเรียบร้อย")
+                
+                QMessageBox.information(self, "สำเร็จ", f"บันทึก {success_count} embedding ให้ Employee {employee_id} เรียบร้อยแล้ว\nตอนนี้ {employee_id} มี embedding ทั้งหมด {success_count} ตัว\nระบบได้รีโหลดฐานข้อมูลใบหน้าแล้ว")
                 self.accept()
             else:
                 QMessageBox.critical(self, "ข้อผิดพลาด", "ไม่สามารถบันทึก embedding ได้")
@@ -736,7 +742,11 @@ class FaceRecognitionApp(QWidget):
             return
 
         dialog = AddImageToExistingDialog(self, current_frame)
-        dialog.exec_()
+        if dialog.exec_() == QDialog.Accepted:
+            # รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่ม embedding สำเร็จ
+            self.known_embeddings, self.known_names, self.known_employee_ids = load_face_database()
+            reload_face_database()
+            print("รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่ม embedding ให้พนักงานที่มีอยู่แล้วเรียบร้อย")
 
     def update_frame(self):
         frame = camera_frames.get(self.video_source_name)
