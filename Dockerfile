@@ -18,5 +18,10 @@ RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+ENV PATH="/root/.local/bin:$PATH"
 
+
+COPY ./app /app/app
+
+
+CMD ["uvicorn", "app.FastAPI.main_fastapi:app", "--host", "0.0.0.0", "--port", "80"]
