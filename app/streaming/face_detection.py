@@ -85,7 +85,6 @@ def _maybe_half(t: torch.Tensor):
     return t.half() if (USE_FP16 and t.is_floating_point()) else t
 
 def get_ui_events(max_items=10):
-    """ดึง event สำหรับ GUI ทีละชุด (ไม่บล็อกลูป)"""
     out = []
     for _ in range(min(max_items, len(_ui_event_queue))):
         out.append(_ui_event_queue.popleft())
@@ -196,7 +195,6 @@ def process_camera(rtsp_url, window_name):
 
     
 def _init_trackers_from_items(window_name, frame, drawn_items):
-
     h, w = frame.shape[:2]
     cur_list = _trackers.get(window_name, [])
     used_old = [False] * len(cur_list)
@@ -391,7 +389,7 @@ def log_recognition_event(employee_id, name, frame, box):
 
     now_dt = datetime.datetime.now()
     hour = now_dt.hour
-    if hour < 9:
+    if hour < 12:
         new_event = "in"
     elif hour >= 12:
         new_event = "out"

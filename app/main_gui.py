@@ -134,7 +134,6 @@ class AddFaceDialog(QDialog):
         self.status_text.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
     
     def load_company_options(self):
-        """โหลดรายชื่อบริษัทจาก FastAPI"""
         self.log_status("กำลังโหลดรายชื่อบริษัท...")
         try:
             response = requests.get(f"{FASTAPI_URL}/api/company-options/", timeout=5)
@@ -280,13 +279,11 @@ class AddImageToExistingDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Employee selection
         form_layout = QFormLayout()
         self.employee_combo = QComboBox()
         form_layout.addRow("เลือกพนักงาน:", self.employee_combo)
         layout.addLayout(form_layout)
 
-        # Recording controls
         recording_layout = QHBoxLayout()
         self.record_button = QPushButton("เริ่มบันทึก (5 วินาที)")
         self.record_button.clicked.connect(self.start_recording)
@@ -629,17 +626,13 @@ class FaceRecognitionApp(QWidget):
         self.scroll.setWidget(self.log_container)
         self.scroll.setMinimumWidth(300)
 
-        self.input_rtsp = QLineEdit(self)
-        self.input_rtsp.setPlaceholderText("Enter RTSP URL or leave empty for webcam")
 
-        self.connect_btn = QPushButton("Connect Camera")
-        self.connect_btn.clicked.connect(self.change_camera)
 
-        self.add_face_btn = QPushButton("Add Face")
+        self.add_face_btn = QPushButton("Add New Employee")
         self.add_face_btn.clicked.connect(self.show_add_face_dialog)
 
 
-        self.add_image_existing_btn = QPushButton("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
+        self.add_image_existing_btn = QPushButton("Add Face to Existing Employee")
         self.add_image_existing_btn.clicked.connect(self.show_add_image_existing_dialog)
         self.add_image_existing_btn.setStyleSheet("""
             QPushButton {
@@ -676,7 +669,6 @@ class FaceRecognitionApp(QWidget):
             }
         """)
 
-        # Camera display area - dynamic grid for N cameras
         self.camera_container = QWidget()
         self.camera_layout = QGridLayout(self.camera_container)
         self.camera_layout.setContentsMargins(0, 0, 0, 0)
@@ -707,16 +699,11 @@ class FaceRecognitionApp(QWidget):
                 self.camera_labels.append(lbl)
                 idx += 1
         if len(self.camera_labels) == 1:
-            # Ensure single camera resizes triggers update
             self.camera_labels[0].resizeEvent = lambda event: self.update_frame()
 
         camera_control_layout = QVBoxLayout()
         camera_control_layout.setContentsMargins(0, 0, 0, 0)
         camera_control_layout.setSpacing(5)
-        # Hide manual connect controls in multi-camera mode from .env
-        if not self.multi_camera:
-            camera_control_layout.addWidget(self.input_rtsp)
-            camera_control_layout.addWidget(self.connect_btn)
         camera_control_layout.addWidget(self.add_face_btn)
 
         camera_control_layout.addWidget(self.add_image_existing_btn)
@@ -744,10 +731,7 @@ class FaceRecognitionApp(QWidget):
         self.timer.start(30)
 
     def change_camera(self):
-        rtsp = self.input_rtsp.text().strip()
-        self.video_source = rtsp if rtsp else 0
-        threading.Thread(target=process_camera, args=(self.video_source, self.video_source_name), daemon=True).start()
-        self.timer.start(30)
+        pass
 
     def show_add_face_dialog(self):
         current_frame = camera_frames.get(self.video_source_name)
