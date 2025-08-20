@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: notroot-thinkcentre-m710q
       containers:
         - name: fastapi
-          image: bigtime118/fastapi:latest-42
+          image: bigtime118/fastapi:latest-43
           ports:
             - containerPort: 80
           envFrom:
