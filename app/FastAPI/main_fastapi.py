@@ -765,3 +765,4 @@ def get_available_company_options():
             "message": str(e),
             "available_options": ["Default Company"] 
         }
+        
