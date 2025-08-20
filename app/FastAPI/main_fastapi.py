@@ -769,4 +769,3 @@ def get_available_company_options():
 @app.get("/test")
     def test_hello():
         return {"message": "Hello World"}
-        
