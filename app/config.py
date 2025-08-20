@@ -26,15 +26,14 @@ def _parse_rtsp_urls(raw):
 
 RTSP_URLS = _parse_rtsp_urls(RTSP_RAW)
 
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "face_vectors")
 MIN_LOG_INTERVAL = int(os.getenv("MIN_LOG_INTERVAL", "60"))
 MIN_FACE_AREA = int(os.getenv("MIN_FACE_AREA", "8000"))
 
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "face_vectors")
 MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT = int(os.getenv("MILVUS_PORT", "19530"))
 
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
-
 LOG_EVENT_URL = os.getenv("LOG_EVENT_URL", "")
 
 GRPC_HOST = os.getenv("GRPC_HOST", "localhost")

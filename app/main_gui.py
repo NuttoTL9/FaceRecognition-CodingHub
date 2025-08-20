@@ -45,10 +45,8 @@ class AddFaceDialog(QDialog):
             if boxes is not None:
                 boxes = boxes / 0.6
             face_count = len(boxes) if boxes is not None else 0
-            
             preview_label = QLabel(f"ภาพตัวอย่าง (พบใบหน้า: {face_count} ใบหน้า):")
             layout.addWidget(preview_label)
-            
             display_frame = self.current_frame.copy()
             if boxes is not None:
                 for box in boxes:
@@ -323,17 +321,14 @@ class AddImageToExistingDialog(QDialog):
         recording_layout.addWidget(self.countdown_label)
         layout.addLayout(recording_layout)
 
-        # Progress and status
         self.progress_label = QLabel("สถานะ: รอเริ่มบันทึก")
         self.progress_label.setStyleSheet("font-size: 12px; color: #666;")
         layout.addWidget(self.progress_label)
 
-        # Recorded embeddings count
         self.embeddings_count_label = QLabel("จำนวน embedding ที่บันทึก: 0")
         self.embeddings_count_label.setStyleSheet("font-size: 12px; color: #007ACC; font-weight: bold;")
         layout.addWidget(self.embeddings_count_label)
 
-        # Buttons
         button_layout = QHBoxLayout()
         self.save_button = QPushButton("บันทึกทั้งหมด")
         self.save_button.clicked.connect(self.save_all_embeddings)
@@ -375,7 +370,6 @@ class AddImageToExistingDialog(QDialog):
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
 
-        # Status text
         self.status_text = QTextEdit()
         self.status_text.setMaximumHeight(120)
         self.status_text.setReadOnly(True)
@@ -387,7 +381,6 @@ class AddImageToExistingDialog(QDialog):
         self.status_text.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
 
     def load_employee_list(self):
-        """โหลดรายชื่อจาก FastAPI"""
         try:
             self.log_status("กำลังโหลดรายชื่อพนักงาน...")
             response = requests.get(f"{FASTAPI_URL}/list_employees/", timeout=30)
@@ -434,11 +427,9 @@ class AddImageToExistingDialog(QDialog):
         self.progress_label.setText("สถานะ: เริ่มบันทึกใน 5 วินาที")
         self.log_status("เริ่มการบันทึก embedding...")
         
-        # เริ่มนับถอยหลัง
-        self.countdown_timer.start(1000)  # 1 วินาที
+        self.countdown_timer.start(1000)
 
     def update_countdown(self):
-        """อัพเดตนับถอยหลัง"""
         self.countdown_seconds -= 1
         
         if self.countdown_seconds > 0:
@@ -461,18 +452,15 @@ class AddImageToExistingDialog(QDialog):
             self.progress_label.setText("สถานะ: กำลังบันทึก embedding...")
             self.log_status("เริ่มบันทึก embedding แล้ว! กรุณาหมุนใบหน้าให้ครบทุกมุม")
             
-            # เริ่มบันทึก embedding ทุก 0.5 วินาที เป็นเวลา 5 วินาที
             self.recording_timer = QTimer()
             self.recording_timer.timeout.connect(self.capture_embedding)
-            self.recording_timer.start(500)  # 0.5 วินาที
+            self.recording_timer.start(500)
             
-            # หยุดการบันทึกหลังจาก 5 วินาที
             self.stop_timer = QTimer()
             self.stop_timer.timeout.connect(self.stop_recording)
-            self.stop_timer.start(5000)  # 5 วินาที
+            self.stop_timer.start(5000)
 
     def capture_embedding(self):
-        """บันทึก embedding จากกล้อง"""
         if not self.recording:
             return
             
@@ -494,7 +482,6 @@ class AddImageToExistingDialog(QDialog):
                 self.log_status("ไม่สามารถสร้าง face tensor ได้")
                 return
 
-            # ใช้ resnet model เพื่อแปลง face tensor เป็น embedding
             with torch.no_grad():
                 embedding = resnet(face_tensor).squeeze().cpu().tolist()
 
@@ -510,7 +497,6 @@ class AddImageToExistingDialog(QDialog):
             self.log_status(f"เกิดข้อผิดพลาดในการบันทึก: {str(e)}")
 
     def stop_recording(self):
-        """หยุดการบันทึก"""
         self.recording = False
         if hasattr(self, 'recording_timer'):
             self.recording_timer.stop()
@@ -540,7 +526,6 @@ class AddImageToExistingDialog(QDialog):
             self.log_status("ไม่สามารถบันทึก embedding ได้ กรุณาลองใหม่อีกครั้ง")
 
     def save_all_embeddings(self):
-        """บันทึก embedding ทั้งหมดเข้า Milvus"""
         if len(self.recorded_embeddings) == 0:
             QMessageBox.warning(self, "ไม่มีข้อมูล", "ไม่มี embedding ที่จะบันทึก")
             return
@@ -563,10 +548,8 @@ class AddImageToExistingDialog(QDialog):
             if success_count > 0:
                 self.log_status(f"บันทึกสำเร็จ {success_count}/{len(self.recorded_embeddings)} embedding")
                 
-                # อัพเดตรายการพนักงานหลังจากบันทึกเสร็จ
                 self.load_employee_list()
                 
-                # รีโหลดฐานข้อมูลใบหน้า
                 self.log_status("กำลังรีโหลดฐานข้อมูลใบหน้า...")
                 from streaming.face_detection import reload_face_database
                 reload_face_database()
@@ -765,7 +748,6 @@ class FaceRecognitionApp(QWidget):
 
         dialog = AddImageToExistingDialog(self, current_frame)
         if dialog.exec_() == QDialog.Accepted:
-            # รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่ม embedding สำเร็จ
             self.known_embeddings, self.known_names, self.known_employee_ids = load_face_database()
             reload_face_database()
             print("รีโหลดฐานข้อมูลใบหน้าหลังจากเพิ่ม embedding ให้พนักงานที่มีอยู่แล้วเรียบร้อย")
@@ -802,7 +784,6 @@ class FaceRecognitionApp(QWidget):
                 self.log_face_from_jpg(ev["employee_id"], ev["name"], ev["image_jpg"], ev["time"])
         except Exception:
             pass
-
 
     def log_face(self, employee_id, name, frame):
         rgb_face = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -856,7 +837,6 @@ class FaceRecognitionApp(QWidget):
 
 
     def log_face_from_jpg(self, employee_id, name, jpg_bytes, when_text):
-
         img_array = np.frombuffer(jpg_bytes, dtype=np.uint8)
         bgr = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
         if bgr is None:

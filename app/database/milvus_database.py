@@ -51,7 +51,6 @@ def load_face_database():
         if not results:
             return torch.empty(0, 512).to(DEVICE), [], []
 
-        # นับจำนวน embedding ต่อ employee_id
         employee_counts = {}
         
         for item in results:
@@ -71,10 +70,6 @@ def load_face_database():
         return torch.empty(0, 512).to(DEVICE), [], []
 
 def add_embedding_to_milvus(employee_id: str, name: str, embedding):
-    """
-    เพิ่ม embedding ใหม่สำหรับ employee_id โดยไม่ลบของเก่า
-    รองรับทั้ง torch.Tensor และ list
-    """
     global milvus_collection
     if milvus_collection is None:
         create_milvus_collection()
@@ -93,7 +88,7 @@ def add_embedding_to_milvus(employee_id: str, name: str, embedding):
     else:
         raise ValueError(f"Unsupported embedding type: {type(embedding)}")
 
-    vectors = [vector]  # Milvus ต้องการ list of vectors
+    vectors = [vector]
     employee_ids = [employee_id]
     names = [name]
 

@@ -111,7 +111,6 @@ def reload_face_database():
     global shared_embeddings, shared_names, shared_employee_ids
     embeddings, names, employee_ids = load_face_database()
     
-    # แสดงเฉพาะพนักงานที่ไม่ซ้ำพร้อมจำนวน embedding
     from collections import Counter
     employee_counts = Counter(employee_ids)
     unique_employees = {}
@@ -135,7 +134,6 @@ def reload_face_database():
         emb = _normalize_embeddings(emb)
         emb = _maybe_half(emb)
         shared_embeddings = emb
-
 
 def process_camera(rtsp_url, window_name):
     stream = videostreamthread(rtsp_url)
@@ -193,7 +191,6 @@ def process_camera(rtsp_url, window_name):
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
                 cache["ttl"] -= 1
 
-    
 def _init_trackers_from_items(window_name, frame, drawn_items):
     h, w = frame.shape[:2]
     cur_list = _trackers.get(window_name, [])
@@ -279,7 +276,6 @@ def _update_trackers(window_name, frame):
 
     _trackers[window_name] = new_lst
 
-
 def extract_valid_faces(frame_rgb, boxes):
     face_tensors = []
     valid_boxes = []
@@ -294,13 +290,11 @@ def extract_valid_faces(frame_rgb, boxes):
             valid_boxes.append(box)
     return face_tensors, valid_boxes
 
-
 def get_embeddings(face_tensors):
     faces_batch = torch.cat(face_tensors)
     with torch.no_grad():
         embeddings = resnet(faces_batch)
     return embeddings
-
 
 def identify_and_log_faces(frame, embeddings, boxes):
     global last_unknown_alert_time, pending_unknown_alert
@@ -425,7 +419,6 @@ def log_recognition_event(employee_id, name, frame, box):
             _log_queue.put_nowait((employee_id, name, new_event, frame))
     except Exception:
         pass
-
 
 def send_log_with_image(employee_id, name, event, frame, server_url):
     _, img_encoded = cv2.imencode('.jpg', frame)

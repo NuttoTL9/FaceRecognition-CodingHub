@@ -21,7 +21,6 @@ def eye_aspect_ratio(eye):
     C = np.linalg.norm(eye[0] - eye[3])
     return (A + B) / (2.0 * C)
 
-
 def detect_blink(frame):
     img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w = frame.shape[:2]
@@ -46,4 +45,3 @@ def detect_blink(frame):
             return True
 
     return False
-

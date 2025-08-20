@@ -1,7 +1,6 @@
 import requests
 from config import DISCORD_WEBHOOK_URL
 
-
 # LINE_NOTIFY_TOKEN = 'YOUR_LINE_NOTIFY_TOKEN'  # เปลี่ยนเป็น Token ของคุณ
 
 # def send_line_alert(message):

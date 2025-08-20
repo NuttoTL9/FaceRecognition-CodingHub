@@ -5,6 +5,7 @@ import numpy as np
 from config import RTSP_URLS
 from streaming.face_detection import process_camera, camera_frames, camera_streams, should_exit
 
+
 def start_all_cameras():
     should_exit[0] = False
     threads = []
@@ -14,7 +15,6 @@ def start_all_cameras():
         t.start()
         threads.append(t)
     return threads
-
 
 def show_camera_frames():
     window_name = "Cameras"
@@ -77,4 +77,3 @@ def show_camera_frames():
             break
 
     cv2.destroyAllWindows()
-
