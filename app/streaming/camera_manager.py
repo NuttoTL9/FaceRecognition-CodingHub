@@ -31,7 +31,6 @@ def show_camera_frames():
         if count == 0:
             return None
         rows, cols = compute_grid(count)
-        # Determine tile size from the first valid frame
         base_h, base_w = None, None
         for f in frames_list:
             if f is not None:
@@ -39,11 +38,9 @@ def show_camera_frames():
                 break
         if base_h is None:
             return None
-        # Scale tiles to a reasonable size
         tile_w = max(200, min(640, base_w))
         tile_h = max(150, min(480, base_h))
 
-        # Prepare black canvas
         mosaic = np.zeros((rows * tile_h, cols * tile_w, 3), dtype=np.uint8)
 
         for i in range(rows * cols):
@@ -55,13 +52,11 @@ def show_camera_frames():
                 frame = cv2.resize(frames_list[i], (tile_w, tile_h), interpolation=cv2.INTER_LINEAR)
                 mosaic[y1:y2, x1:x2] = frame
             else:
-                # Leave black if no frame available
                 pass
         return mosaic
 
     while True:
         frames_copy = camera_frames.copy()
-        # Keep deterministic order by name
         items = sorted(frames_copy.items(), key=lambda kv: kv[0])
         frames_list = [frame for _name, frame in items if frame is not None]
         grid = make_mosaic(frames_list)

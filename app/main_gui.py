@@ -10,11 +10,12 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
     QScrollArea, QPushButton, QLineEdit, QSizePolicy, QDialog,
     QFormLayout, QDateEdit, QComboBox, QMessageBox, QTextEdit,
-    QGridLayout
+    QGridLayout, QLayout
 )
 
 from PyQt5.QtCore import Qt, QTimer, QDate
 from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtWidgets import QFrame, QGroupBox
 from datetime import datetime
 
 from config import FASTAPI_URL, RTSP_URLS
@@ -32,52 +33,149 @@ class AddFaceDialog(QDialog):
         self.current_frame = current_frame
         self.setWindowTitle("เพิ่มใบหน้าพนักงานใหม่")
         self.setModal(True)
-        self.setFixedSize(450, 650)
+        self.setMinimumSize(480, 560)
+        try:
+            self.setSizeGripEnabled(True)
+        except Exception:
+            pass
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8f9fa;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QLabel {
+                color: #2c3e50;
+                font-weight: 500;
+            }
+            QLineEdit, QComboBox, QDateEdit {
+                padding: 8px 12px;
+                border: 2px solid #e9ecef;
+                border-radius: 6px;
+                background-color: white;
+                font-size: 12px;
+                min-height: 20px;
+            }
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+                border-color: #007bff;
+                outline: none;
+            }
+            QPushButton {
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 13px;
+                min-height: 20px;
+            }
+            QTextEdit {
+                border: 2px solid #e9ecef;
+                border-radius: 6px;
+                background-color: white;
+                padding: 8px;
+            }
+        """)
         self.init_ui()
         
     def init_ui(self):
         layout = QVBoxLayout()
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
         
-        if self.current_frame is not None:
-            frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
-            small_prev = cv2.resize(frame_rgb, (0,0), fx=0.6, fy=0.6, interpolation=cv2.INTER_LINEAR)
-            boxes, _ = mtcnn.detect(small_prev)
-            if boxes is not None:
-                boxes = boxes / 0.6
-            face_count = len(boxes) if boxes is not None else 0
-            preview_label = QLabel(f"ภาพตัวอย่าง (พบใบหน้า: {face_count} ใบหน้า):")
-            layout.addWidget(preview_label)
-            display_frame = self.current_frame.copy()
-            if boxes is not None:
-                for box in boxes:
-                    x1, y1, x2, y2 = map(int, box)
-                    cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(display_frame, "Face", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            
-            rgb_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
-            h, w, ch = rgb_frame.shape
-            bytes_per_line = ch * w
-            q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-            pixmap = QPixmap.fromImage(q_img).scaled(200, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            
-            image_label = QLabel()
-            image_label.setPixmap(pixmap)
-            image_label.setAlignment(Qt.AlignCenter)
-            image_label.setStyleSheet("border: 1px solid gray; padding: 5px;")
-            layout.addWidget(image_label)
+        # Header
+        header_label = QLabel("📷 เพิ่มพนักงานใหม่")
+        header_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 6px 0;
+            border-bottom: 2px solid #e9ecef;
+        """)
+        layout.addWidget(header_label)
+        
+        # Camera selection section
+        camera_group = QGroupBox("เลือกกล้อง")
+        camera_group.setStyleSheet("QGroupBox { font-weight: bold; color: #495057; }")
+        camera_section = QVBoxLayout(camera_group)
+        camera_section.setSpacing(8)
+        camera_section.setContentsMargins(8, 8, 8, 8)
+        
+        camera_header = QLabel("🎥 เลือกกล้อง")
+        camera_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #495057;")
+        camera_section.addWidget(camera_header)
+        
+        camera_form = QFormLayout()
+        camera_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        camera_form.setSpacing(10)
+        self.camera_combo = QComboBox()
+        if len(RTSP_URLS) > 1:
+            camera_names = [f"Camera-{i+1}" for i in range(len(RTSP_URLS))]
+        else:
+            camera_names = ["MainCam"]
+        self.camera_combo.addItems(camera_names)
+        self.camera_combo.currentTextChanged.connect(self.on_camera_changed)
+        camera_form.addRow("กล้อง:", self.camera_combo)
+        
+        # Camera preview
+        preview_layout = QHBoxLayout()
+        preview_layout.setSpacing(0)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.camera_preview = QLabel()
+        self.camera_preview.setMinimumSize(320, 180)
+        self.camera_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.camera_preview.setStyleSheet("""
+            border: 3px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            padding: 5px;
+        """)
+        self.camera_preview.setAlignment(Qt.AlignCenter)
+        self.camera_preview.setText("รอภาพจากกล้อง...")
+        
+        preview_layout.addWidget(self.camera_preview)
+        
+        camera_section.addLayout(camera_form)
+        camera_section.addLayout(preview_layout)
+        layout.addWidget(camera_group)
+        layout.addSpacing(10)
+        
+        # spacing before details section
+        layout.addSpacing(8)
+        
+        # เพิ่ม timer สำหรับอัพเดตภาพตัวอย่าง
+        self.preview_timer = QTimer()
+        self.preview_timer.timeout.connect(self.update_preview)
+        self.preview_timer.start(120)  # อัพเดตทุก 120ms
+        
+        # Employee information section
+        info_section = QVBoxLayout()
+        info_section.setSpacing(8)
+        
+        info_header = QLabel("👤 ข้อมูลพนักงาน")
+        info_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #495057;")
+        info_section.addWidget(info_header)
         
         form_layout = QFormLayout()
+        form_layout.setSpacing(12)
+        form_layout.setLabelAlignment(Qt.AlignRight)
         
+        # Personal info
         self.firstname_edit = QLineEdit()
+        self.firstname_edit.setPlaceholderText("กรอกชื่อจริง")
         form_layout.addRow("ชื่อจริง:", self.firstname_edit)
         
         self.lastname_edit = QLineEdit()
+        self.lastname_edit.setPlaceholderText("กรอกนามสกุล")
         form_layout.addRow("นามสกุล:", self.lastname_edit)
         
         self.gender_combo = QComboBox()
         self.gender_combo.addItems(["Male", "Female"])
         form_layout.addRow("เพศ:", self.gender_combo)
         
+        # Date info
         self.date_of_joining_edit = QDateEdit()
         self.date_of_joining_edit.setDate(QDate.currentDate())
         self.date_of_joining_edit.setCalendarPopup(True)
@@ -88,45 +186,149 @@ class AddFaceDialog(QDialog):
         self.date_of_birth_edit.setCalendarPopup(True)
         form_layout.addRow("วันเกิด:", self.date_of_birth_edit)
         
+        # Company info
         company_layout = QHBoxLayout()
+        company_layout.setSpacing(8)
         self.company_combo = QComboBox()
         self.company_combo.setEditable(True)
         self.company_combo.setInsertPolicy(QComboBox.InsertAtTop)
+        self.company_combo.setPlaceholderText("เลือกหรือพิมพ์ชื่อบริษัท")
         
         self.refresh_company_btn = QPushButton("🔄")
         self.refresh_company_btn.setToolTip("รีเฟรชรายชื่อบริษัท")
-        self.refresh_company_btn.setMaximumWidth(30)
+        self.refresh_company_btn.setFixedSize(35, 35)
+        self.refresh_company_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #5a6268;
+            }
+        """)
         self.refresh_company_btn.clicked.connect(self.load_company_options)
         
         company_layout.addWidget(self.company_combo)
         company_layout.addWidget(self.refresh_company_btn)
         form_layout.addRow("บริษัท:", company_layout)
         
-        layout.addLayout(form_layout)
+        info_section.addLayout(form_layout)
+        layout.addLayout(info_section)
         
+        # Buttons section
         button_layout = QHBoxLayout()
-        self.save_button = QPushButton("บันทึก")
-        self.save_button.clicked.connect(self.save_employee)
-        self.cancel_button = QPushButton("ยกเลิก")
-        self.cancel_button.clicked.connect(self.reject)
+        button_layout.setSpacing(15)
         
+        self.save_button = QPushButton("💾 บันทึก")
+        self.save_button.clicked.connect(self.save_employee)
+        self.save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 12px 25px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """)
+        
+        self.cancel_button = QPushButton("❌ ยกเลิก")
+        self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 12px 25px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+        """)
+        
+        button_layout.addStretch()
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
+        button_layout.addStretch()
         layout.addLayout(button_layout)
         
+        # Info section
         info_label = QLabel("💡 หมายเหตุ: ระบบจะใช้ภาพปัจจุบันจากกล้องเพื่อบันทึกใบหน้า\n📋 สามารถเลือกบริษัทที่มีอยู่หรือพิมพ์ชื่อใหม่ได้")
-        info_label.setStyleSheet("color: #666; font-size: 10pt; padding: 5px;")
+        info_label.setStyleSheet("""
+            color: #6c757d;
+            font-size: 11px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        """)
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
         
+        # Status section
+        status_header = QLabel("📊 สถานะการทำงาน")
+        status_header.setStyleSheet("font-size: 12px; font-weight: bold; color: #495057; margin-top: 10px;")
+        layout.addWidget(status_header)
+        
         self.status_text = QTextEdit()
-        self.status_text.setMaximumHeight(100)
+        self.status_text.setMaximumHeight(60)
         self.status_text.setReadOnly(True)
+        self.status_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 8px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 10px;
+            }
+        """)
         layout.addWidget(self.status_text)
         
         self.setLayout(layout)
+        try:
+            self.adjustSize()
+        except Exception:
+            pass
         
         self.load_company_options()
+    
+    def on_camera_changed(self):
+        self.camera_preview.setText("กำลังโหลดภาพ...")
+        
+    def update_preview(self):
+        try:
+            selected_camera = self.camera_combo.currentText()
+            current_frame = camera_frames.get(selected_camera)
+            if current_frame is not None:
+                rgb_frame = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb_frame.shape
+                bytes_per_line = ch * w
+                q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(q_img).scaled(
+                    self.camera_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                self.camera_preview.setPixmap(pixmap)
+            else:
+                self.camera_preview.setText(f"ไม่พบภาพจาก {selected_camera}")
+        except Exception:
+            self.camera_preview.setText("เกิดข้อผิดพลาด")
     
     def log_status(self, message):
         self.status_text.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
@@ -162,8 +364,11 @@ class AddFaceDialog(QDialog):
             QMessageBox.warning(self, "ข้อมูลไม่ครบ", "กรุณากรอกข้อมูลให้ครบถ้วน")
             return
         
-        if self.current_frame is None:
-            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง")
+        # ใช้ภาพจากกล้องที่เลือก
+        selected_camera = self.camera_combo.currentText()
+        current_frame = camera_frames.get(selected_camera)
+        if current_frame is None:
+            QMessageBox.warning(self, "ไม่พบภาพ", f"ไม่พบภาพจากกล้อง {selected_camera}")
             return
         
         self.log_status("เริ่มต้นการบันทึกข้อมูลพนักงาน...")
@@ -207,17 +412,17 @@ class AddFaceDialog(QDialog):
             
             self.log_status(f"ได้ employee_id: {employee_id}")
             
-            frame_rgb = cv2.cvtColor(self.current_frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
             boxes, _ = mtcnn.detect(frame_rgb)
             
             if boxes is None:
                 self.log_status(" ไม่พบใบหน้าในภาพ")
-                QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง")
+                QMessageBox.warning(self, "ไม่พบใบหน้า", f"ไม่พบใบหน้าในภาพจากกล้อง {selected_camera}")
                 return
             
             face_added = False
             for box in boxes:
-                face_tensor = preprocess_face(self.current_frame, box)
+                face_tensor = preprocess_face(current_frame, box)
                 if face_tensor is None:
                     self.log_status(" ไม่สามารถสร้าง face tensor ได้")
                     continue
@@ -258,6 +463,10 @@ class AddFaceDialog(QDialog):
             self.log_status(f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
             QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาดขณะบันทึก: {str(e)}")
 
+    def closeEvent(self, event):
+        self.preview_timer.stop()
+        super().closeEvent(event)
+
 
 class AddImageToExistingDialog(QDialog):
     def __init__(self, parent=None, current_frame=None):
@@ -265,69 +474,223 @@ class AddImageToExistingDialog(QDialog):
         self.current_frame = current_frame
         self.setWindowTitle("เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
         self.setModal(True)
-        self.setFixedSize(500, 400)
+        self.setMinimumSize(520, 620)
+        try:
+            self.setSizeGripEnabled(True)
+        except Exception:
+            pass
         self.recording = False
         self.recorded_embeddings = []
         self.countdown_timer = QTimer()
         self.countdown_timer.timeout.connect(self.update_countdown)
         self.countdown_seconds = 5
-        self.init_ui()
-        self.load_employee_list()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
         
-        form_layout = QFormLayout()
-        self.employee_combo = QComboBox()
-        form_layout.addRow("เลือกพนักงาน:", self.employee_combo)
-        layout.addLayout(form_layout)
 
-        recording_layout = QHBoxLayout()
-        self.record_button = QPushButton("เริ่มบันทึก (5 วินาที)")
-        self.record_button.clicked.connect(self.start_recording)
-        self.record_button.setStyleSheet("""
+        self.preview_timer = QTimer()
+        self.preview_timer.timeout.connect(self.update_preview)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8f9fa;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QLabel {
+                color: #2c3e50;
+                font-weight: 500;
+            }
+            QLineEdit, QComboBox {
+                padding: 8px 12px;
+                border: 2px solid #e9ecef;
+                border-radius: 6px;
+                background-color: white;
+                font-size: 12px;
+                min-height: 20px;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border-color: #007bff;
+                outline: none;
+            }
             QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
                 padding: 10px 20px;
-                border-radius: 5px;
+                border-radius: 6px;
                 font-weight: bold;
-                font-size: 14px;
+                font-size: 13px;
+                min-height: 20px;
             }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
+            QTextEdit {
+                border: 2px solid #e9ecef;
+                border-radius: 6px;
+                background-color: white;
+                padding: 8px;
             }
         """)
         
-        self.countdown_label = QLabel("พร้อมบันทึก")
+        self.init_ui()
+        self.load_employee_list()
+        
+        self.preview_timer.start(100)
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+        
+        # Header
+        header_label = QLabel("📸 เพิ่มรูปให้พนักงานที่มีอยู่แล้ว")
+        header_label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            padding: 6px 0;
+            border-bottom: 2px solid #e9ecef;
+        """)
+        layout.addWidget(header_label)
+        
+        selection_section = QVBoxLayout()
+        selection_section.setSpacing(8)
+        
+        selection_header = QLabel("👥 เลือกพนักงานและกล้อง")
+        selection_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #495057;")
+        selection_section.addWidget(selection_header)
+        
+        form_layout = QFormLayout()
+        form_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form_layout.setSpacing(10)
+        form_layout.setLabelAlignment(Qt.AlignRight)
+        
+        self.employee_combo = QComboBox()
+        self.employee_combo.setPlaceholderText("เลือกพนักงาน")
+        form_layout.addRow("พนักงาน:", self.employee_combo)
+        
+        self.camera_combo = QComboBox()
+        if len(RTSP_URLS) > 1:
+            camera_names = [f"Camera-{i+1}" for i in range(len(RTSP_URLS))]
+        else:
+            camera_names = ["MainCam"]
+        self.camera_combo.addItems(camera_names)
+        self.camera_combo.currentTextChanged.connect(self.on_camera_changed)
+        form_layout.addRow("กล้อง:", self.camera_combo)
+        
+        selection_section.addLayout(form_layout)
+        layout.addLayout(selection_section)
+        
+        separator = QLabel()
+        separator.setStyleSheet("background-color: #dee2e6; min-height: 1px; max-height: 1px;")
+        layout.addWidget(separator)
+
+        preview_group = QGroupBox("ภาพตัวอย่างจากกล้อง")
+        preview_group.setStyleSheet("QGroupBox { font-weight: bold; color: #495057; }")
+        preview_section = QVBoxLayout(preview_group)
+        preview_section.setSpacing(8)
+        preview_section.setContentsMargins(12, 12, 12, 12)
+        
+        preview_layout = QHBoxLayout()
+        preview_layout.setSpacing(15)
+        
+        self.camera_preview = QLabel()
+        self.camera_preview.setMinimumSize(420, 236)
+        self.camera_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.camera_preview.setStyleSheet("""
+            border: 3px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            padding: 5px;
+        """)
+        self.camera_preview.setAlignment(Qt.AlignCenter)
+        self.camera_preview.setText("รอภาพจากกล้อง...")
+        
+        preview_layout.addWidget(self.camera_preview)
+        
+        preview_section.addLayout(preview_layout)
+        layout.addWidget(preview_group)
+        layout.addSpacing(10)
+
+        # Recording section
+        recording_group = QGroupBox("การบันทึก")
+        recording_group.setStyleSheet("QGroupBox { font-weight: bold; color: #495057; }")
+        recording_section = QVBoxLayout(recording_group)
+        recording_section.setSpacing(10)
+        recording_section.setContentsMargins(12, 12, 12, 12)
+        
+        recording_header = QLabel("🎬 การบันทึก")
+        recording_header.setStyleSheet("font-size: 14px; font-weight: bold; color: #495057;")
+        recording_section.addWidget(recording_header)
+        
+        recording_layout = QHBoxLayout()
+        recording_layout.setSpacing(15)
+        recording_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.record_button = QPushButton("🎥 เริ่มบันทึก (5 วินาที)")
+        self.record_button.clicked.connect(self.start_recording)
+        self.record_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+            }
+        """)
+        
+        self.countdown_label = QLabel("⏳ พร้อมบันทึก")
         self.countdown_label.setStyleSheet("""
             QLabel {
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: bold;
-                color: #333;
-                padding: 10px;
-                border: 2px solid #ddd;
-                border-radius: 5px;
-                background-color: #f9f9f9;
+                color: #495057;
+                padding: 12px 20px;
+                border: 2px solid #dee2e6;
+                border-radius: 6px;
+                background-color: #f8f9fa;
+                min-width: 150px;
             }
         """)
         self.countdown_label.setAlignment(Qt.AlignCenter)
         
+        recording_layout.addStretch()
         recording_layout.addWidget(self.record_button)
         recording_layout.addWidget(self.countdown_label)
-        layout.addLayout(recording_layout)
+        recording_layout.addStretch()
+        recording_section.addLayout(recording_layout)
 
-        self.progress_label = QLabel("สถานะ: รอเริ่มบันทึก")
-        self.progress_label.setStyleSheet("font-size: 12px; color: #666;")
-        layout.addWidget(self.progress_label)
+        # Status labels
+        status_layout = QVBoxLayout()
+        status_layout.setSpacing(8)
+        
+        self.progress_label = QLabel("📊 สถานะ: รอเริ่มบันทึก")
+        self.progress_label.setWordWrap(True)
+        self.progress_label.setStyleSheet("""
+            font-size: 12px; 
+            color: #6c757d; 
+            padding: 8px 12px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        """)
+        status_layout.addWidget(self.progress_label)
 
-        self.embeddings_count_label = QLabel("จำนวน embedding ที่บันทึก: 0")
-        self.embeddings_count_label.setStyleSheet("font-size: 12px; color: #007ACC; font-weight: bold;")
-        layout.addWidget(self.embeddings_count_label)
+        self.embeddings_count_label = QLabel("📈 จำนวน embedding ที่บันทึก: 0")
+        self.embeddings_count_label.setWordWrap(True)
+        self.embeddings_count_label.setStyleSheet("""
+            font-size: 12px; 
+            color: #007bff; 
+            font-weight: bold;
+            padding: 8px 12px;
+            background-color: #d1ecf1;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        """)
+        status_layout.addWidget(self.embeddings_count_label)
+        
+        recording_section.addLayout(status_layout)
+        layout.addWidget(recording_group)
 
         button_layout = QHBoxLayout()
         self.save_button = QPushButton("บันทึกทั้งหมด")
@@ -398,7 +761,6 @@ class AddImageToExistingDialog(QDialog):
             self.log_status(f"เกิดข้อผิดพลาด: {str(e)}")
 
     def start_recording(self):
-        """เริ่มการบันทึก embedding"""
         if self.recording:
             return
             
@@ -465,9 +827,10 @@ class AddImageToExistingDialog(QDialog):
             return
             
         try:
-            current_frame = camera_frames.get("MainCam")
+            selected_camera = self.camera_combo.currentText()
+            current_frame = camera_frames.get(selected_camera)
             if current_frame is None:
-                self.log_status("ไม่พบภาพจากกล้อง")
+                self.log_status(f"ไม่พบภาพจากกล้อง {selected_camera}")
                 return
 
             frame_rgb = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
@@ -495,6 +858,27 @@ class AddImageToExistingDialog(QDialog):
 
         except Exception as e:
             self.log_status(f"เกิดข้อผิดพลาดในการบันทึก: {str(e)}")
+
+    def on_camera_changed(self):
+        self.camera_preview.setText("กำลังโหลดภาพ...")
+        
+    def update_preview(self):
+        try:
+            selected_camera = self.camera_combo.currentText()
+            current_frame = camera_frames.get(selected_camera)
+            if current_frame is not None:
+                rgb_frame = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
+                h, w, ch = rgb_frame.shape
+                bytes_per_line = ch * w
+                q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(q_img).scaled(
+                    self.camera_preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                self.camera_preview.setPixmap(pixmap)
+            else:
+                self.camera_preview.setText(f"ไม่พบภาพจาก {selected_camera}")
+        except Exception:
+            self.camera_preview.setText("เกิดข้อผิดพลาด")
 
     def stop_recording(self):
         self.recording = False
@@ -565,10 +949,10 @@ class AddImageToExistingDialog(QDialog):
             QMessageBox.critical(self, "ข้อผิดพลาด", f"เกิดข้อผิดพลาด: {str(e)}")
 
     def closeEvent(self, event):
-        """หยุด timer เมื่อปิด dialog"""
         if self.recording:
             self.stop_recording()
         self.countdown_timer.stop()
+        self.preview_timer.stop()
         super().closeEvent(event)
 
 
@@ -581,7 +965,10 @@ class FaceRecognitionApp(QWidget):
 
         # Multi-camera support
         self.multi_camera = len(RTSP_URLS) > 1
-        self.camera_names = [f"Camera-{i+1}" for i in range(len(RTSP_URLS))] if self.multi_camera else ["MainCam"]
+        if self.multi_camera:
+            self.camera_names = [f"Camera-{i+1}" for i in range(len(RTSP_URLS))]
+        else:
+            self.camera_names = ["MainCam"]
         self.video_source_name = self.camera_names[0]
         self.last_logged_names = []
         self.last_log_times = {}
@@ -633,7 +1020,6 @@ class FaceRecognitionApp(QWidget):
                 background-color: #0D47A1;
             }
         """)
-        # ---------------------------------------------------- #
 
         self.add_face_btn.setStyleSheet("""
             QPushButton {
@@ -717,15 +1103,24 @@ class FaceRecognitionApp(QWidget):
         pass
 
     def show_add_face_dialog(self):
-        current_frame = camera_frames.get(self.video_source_name)
-        if current_frame is None:
-            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง กรุณาตรวจสอบการเชื่อมต่อกล้อง")
+        # ตรวจสอบว่ามีกล้องใดบ้างที่มีภาพ
+        available_cameras = []
+        for camera_name in self.camera_names:
+            if camera_frames.get(camera_name) is not None:
+                available_cameras.append(camera_name)
+        
+        if not available_cameras:
+            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้องใดๆ กรุณาตรวจสอบการเชื่อมต่อกล้อง")
             return
+        
+        # ใช้กล้องแรกที่มีภาพเป็นค่าเริ่มต้น
+        default_camera = available_cameras[0]
+        current_frame = camera_frames.get(default_camera)
         
         frame_rgb = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
         boxes, _ = mtcnn.detect(frame_rgb)
         if boxes is None or len(boxes) == 0:
-            QMessageBox.warning(self, "ไม่พบใบหน้า", "ไม่พบใบหน้าในภาพจากกล้อง กรุณาตรวจสอบให้แน่ใจว่ามีใบหน้าอยู่ในกล้อง")
+            QMessageBox.warning(self, "ไม่พบใบหน้า", f"ไม่พบใบหน้าในภาพจากกล้อง {default_camera} กรุณาตรวจสอบให้แน่ใจว่ามีใบหน้าอยู่ในกล้อง")
             return
         
         self.add_face_btn.setEnabled(False)
@@ -738,13 +1133,22 @@ class FaceRecognitionApp(QWidget):
                 print("รีโหลดฐานข้อมูลใบหน้าเรียบร้อย")
         finally:
             self.add_face_btn.setEnabled(True)
-            self.add_face_btn.setText("Add Face")
+            self.add_face_btn.setText("Add New Employee")
 
     def show_add_image_existing_dialog(self):
-        current_frame = camera_frames.get(self.video_source_name)
-        if current_frame is None:
-            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้อง กรุณาตรวจสอบการเชื่อมต่อกล้อง")
+        # ตรวจสอบว่ามีกล้องใดบ้างที่มีภาพ
+        available_cameras = []
+        for camera_name in self.camera_names:
+            if camera_frames.get(camera_name) is not None:
+                available_cameras.append(camera_name)
+        
+        if not available_cameras:
+            QMessageBox.warning(self, "ไม่พบภาพ", "ไม่พบภาพจากกล้องใดๆ กรุณาตรวจสอบการเชื่อมต่อกล้อง")
             return
+
+        # ใช้กล้องแรกที่มีภาพเป็นค่าเริ่มต้น
+        default_camera = available_cameras[0]
+        current_frame = camera_frames.get(default_camera)
 
         dialog = AddImageToExistingDialog(self, current_frame)
         if dialog.exec_() == QDialog.Accepted:
