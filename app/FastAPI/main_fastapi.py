@@ -748,7 +748,6 @@ def get_available_gender_options():
             "message": str(e),
             "available_options": ["Male", "Female"]
         }
-
 @app.get("/api/company-options/")
 def get_available_company_options():
     """ดึงรายชื่อบริษัทที่มีอยู่ใน ERPNext"""
