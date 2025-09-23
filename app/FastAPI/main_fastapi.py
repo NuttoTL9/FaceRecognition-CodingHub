@@ -413,8 +413,6 @@ async def add_face_to_existing(
         print("❌ Failed to add face to existing employee:", e)
         raise HTTPException(status_code=500, detail="Failed to add face to existing employee")
 
-
-
 @app.post("/log_event_with_snap/")
 async def log_event_with_snap(
     employee_id: str = Form(...),
