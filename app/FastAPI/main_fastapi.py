@@ -85,7 +85,6 @@ async def ensure_table_exists():
     await conn.close()
     print("Table face_recog_log is ensured with image support")
 
-
 @app.on_event("startup")
 async def startup():
     await ensure_table_exists()
