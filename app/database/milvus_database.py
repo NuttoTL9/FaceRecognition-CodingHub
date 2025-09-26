@@ -6,6 +6,8 @@ from config import DEVICE, COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT
 connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
 milvus_collection = None
 
+
+
 def create_milvus_collection():
     global milvus_collection
     if COLLECTION_NAME in utility.list_collections():
