@@ -241,6 +241,9 @@ def insert_face_vector(employee_id: str, name: str, embedding: list[float]):
 
 
 
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 
 
 @app.post("/add_face_vector/")
