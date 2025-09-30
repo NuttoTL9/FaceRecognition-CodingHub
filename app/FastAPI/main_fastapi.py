@@ -240,6 +240,11 @@ def insert_face_vector(employee_id: str, name: str, embedding: list[float]):
     print(f"✅ Inserted employee_id={employee_id}, name={name} to Milvus")
 
 
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
+
+
 @app.post("/add_face_vector/")
 def add_face_vector(data: VectorData, _=Depends(get_milvus_connection)):
     if not data.employee_id.strip():
