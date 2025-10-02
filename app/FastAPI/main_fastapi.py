@@ -55,6 +55,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 mtcnn = MTCNN(keep_all=False, device=device)
 resnet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
+
+
 async def ensure_table_exists():
     # อัพเดตตารางเพื่อรองรับการเก็บภาพ
     query = """
